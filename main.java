@@ -22,7 +22,7 @@ class main {
    public static void main(String[] var0) throws Exception {
       if (TOKEN != null && !TOKEN.isBlank()) {
          long var1 = 0L;
-         System.out.println("Бот запущен...");
+         System.out.println("Бот запущен.......");
 
          while(true) {
             try {
@@ -37,19 +37,19 @@ class main {
                   handleMessage(var7, var9);
                }
             } catch (Exception var10) {
-               System.out.println("Ошибка: " + var10.getMessage());
+               System.out.println("Ошибка!!!!!: " + var10.getMessage());
                Thread.sleep(3000L);
             }
          }
       }
 
-      System.out.println("Укажи токен бота в переменной окружения BOT_TOKEN");
+      System.out.println("Укажи токен бота BOT_TOKEN");
    }
 
    private static void handleMessage(long var0, String var2) throws IOException, InterruptedException {
       if (var2 != null && !var2.isBlank()) {
          if ("/start".equals(var2.trim())) {
-            sendMessage(var0, "Привет. Я простой Java Telegram-бот.");
+            sendMessage(var0, "Привет. Я простой Black Pill Telegram-бот.");
          } else {
             sendMessage(var0, "Ты написал: " + var2);
          }
