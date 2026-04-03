@@ -8,7 +8,7 @@ public class Main {
             System.out.println("🤖 ЗАПУСК БОТА...");
             TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
             RatingBot bot = new RatingBot();
-            // Пиздец, обходим ебаную ошибку
+            // Обход ошибки вебхука: установим флаг очистки
             try {
                 java.lang.reflect.Field field = bot.getClass().getSuperclass().getDeclaredField("webhookCleared");
                 field.setAccessible(true);
