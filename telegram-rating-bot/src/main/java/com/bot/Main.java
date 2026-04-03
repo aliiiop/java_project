@@ -8,7 +8,6 @@ public class Main {
             System.out.println("🤖 ЗАПУСК БОТА...");
             TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
             RatingBot bot = new RatingBot();
-            // Пиздец, обходим ебаную ошибку
             try {
                 java.lang.reflect.Field field = bot.getClass().getSuperclass().getDeclaredField("webhookCleared");
                 field.setAccessible(true);
@@ -19,7 +18,6 @@ public class Main {
             System.out.println("📱 ИДИ В TELEGRAM И НАПИШИ @KARATabletka2_bot");
         } catch (Exception e) {
             System.out.println("❌ ОШИБКА: " + e.getMessage());
-            System.out.println("НО БОТ ДОЛЖЕН РАБОТАТЬ! ПРОВЕРЬ В TELEGRAM!");
         }
     }
 }
