@@ -1,8 +1,20 @@
 package com.bot;
 import java.util.*;
 public class RatingUtils {
-    public static double evaluateFace(String photoId, String gender) { return 1 + Math.random() * 9; }
-    public static double evaluateBodyByPhoto(String photoId, String gender) { return 1 + Math.random() * 9; }
+    public static double evaluateFace(String photoId, String gender) {
+        if (photoId == null || photoId.isEmpty()) return 0;
+        // Генерируем стабильную оценку на основе хеша photoId
+        int hash = photoId.hashCode();
+        double rating = 3.5 + (Math.abs(hash % 50) / 10.0);
+        return Math.max(1.0, Math.min(10.0, rating));
+    }
+    public static double evaluateBodyByPhoto(String photoId, String gender) {
+        if (photoId == null || photoId.isEmpty()) return 0;
+        // Генерируем стабильную оценку на основе хеша photoId
+        int hash = photoId.hashCode();
+        double rating = 3.0 + (Math.abs(hash % 60) / 10.0);
+        return Math.max(1.0, Math.min(10.0, rating));
+    }
     public static double evaluateBodyByMeasurements(Map<String, Double> m, String gender) {
         // Получаем основные параметры
         double height = m.getOrDefault("height", 175.0); // см
