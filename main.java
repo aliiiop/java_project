@@ -22,7 +22,7 @@ class main {
    public static void main(String[] var0) throws Exception {
       if (TOKEN != null && !TOKEN.isBlank()) {
          long var1 = 0L;
-         System.out.println("Бот запущен.......");
+         System.out.println("Бот запущен.....                                                                                                                                                      ёёё..");
 
          while(true) {
             try {
