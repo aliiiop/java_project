@@ -55,9 +55,13 @@ public class RatingBot extends TelegramLongPollingBot {
                     return;
                 }
                 
-                // Если ждем замеры
-                if (session.getState() == UserState.WAITING_FOR_MEASUREMENTS) {
-                    handleMeasurements(chatId, text, session);
+                // Если ждем замеры (пошаговый ввод)
+                if (session.getState() == UserState.WAITING_FOR_HEIGHT ||
+                    session.getState() == UserState.WAITING_FOR_WEIGHT ||
+                    session.getState() == UserState.WAITING_FOR_CHEST ||
+                    session.getState() == UserState.WAITING_FOR_WAIST ||
+                    session.getState() == UserState.WAITING_FOR_HIPS) {
+                    handleMeasurementStep(chatId, text, session);
                     return;
                 }
                 
@@ -172,14 +176,70 @@ public class RatingBot extends TelegramLongPollingBot {
             sendText(chatId, "📸 Отправьте фото тела\n\nТребования: четкое фото, в полный рост");
         } else if (text.equals("📏 Оценка тела по замерам")) {
             s.setRatingType("measure");
-            s.setState(UserState.WAITING_FOR_MEASUREMENTS);
-            if (s.getGender().equals("male")) {
-                sendText(chatId, "📏 Введите замеры в формате:\n\n*рост:180 вес:75 грудь:100 талия:80 плечи:45 шея:40*\n\n🔹 Все параметры в см и кг\n🔹 Минимум укажите: грудь, талия\n\nПример: грудь:95 талия:80");
-            } else {
-                sendText(chatId, "📏 Введите замеры в формате:\n\n*рост:168 вес:60 грудь:90 талия:65 бедра:90*\n\n🔹 Все параметры в см и кг\n🔹 Минимум укажите: грудь, талия, бедра\n\nПример: рост:168 вес:60 грудь:90 талия:65 бедра:90");
-            }
+            s.getBodyMeasurements().clear();
+            s.setState(UserState.WAITING_FOR_HEIGHT);
+            sendText(chatId, "📏 *ПОШАГОВЫЙ ВВОД ЗАМЕРОВ*\n\n📍 Шаг 1 из 5\n\n*Введите ваш рост (см):*\n(например: 175)");
         } else {
             sendText(chatId, "❌ Используйте кнопки");
+        }
+    }
+    
+    private void handleMeasurementStep(Long chatId, String text, UserSession s) {
+        try {
+            double value = Double.parseDouble(text.trim());
+            
+            if (value <= 0 || value > 300) {
+                sendText(chatId, "❌ Некорректное значение! Укажите число от 1 до 300");
+                return;
+            }
+            
+            if (s.getState() == UserState.WAITING_FOR_HEIGHT) {
+                s.getBodyMeasurements().put("height", value);
+                s.setState(UserState.WAITING_FOR_WEIGHT);
+                sendText(chatId, "✅ Рост: " + String.format("%.0f", value) + " см\n\n📍 Шаг 2 из 5\n\n*Введите ваш вес (кг):*\n(например: 75)");
+            } else if (s.getState() == UserState.WAITING_FOR_WEIGHT) {
+                s.getBodyMeasurements().put("weight", value);
+                s.setState(UserState.WAITING_FOR_CHEST);
+                sendText(chatId, "✅ Вес: " + String.format("%.1f", value) + " кг\n\n📍 Шаг 3 из 5\n\n*Введите объём груди (см):*\n(например: 100)");
+            } else if (s.getState() == UserState.WAITING_FOR_CHEST) {
+                s.getBodyMeasurements().put("chest", value);
+                s.setState(UserState.WAITING_FOR_WAIST);
+                sendText(chatId, "✅ Грудь: " + String.format("%.0f", value) + " см\n\n📍 Шаг 4 из 5\n\n*Введите объём талии (см):*\n(например: 80)");
+            } else if (s.getState() == UserState.WAITING_FOR_WAIST) {
+                s.getBodyMeasurements().put("waist", value);
+                if (s.getGender().equals("male")) {
+                    s.setState(UserState.WAITING_FOR_HIPS);
+                    sendText(chatId, "✅ Талия: " + String.format("%.0f", value) + " см\n\n📍 Шаг 5 из 5\n\n*Введите ширину плеч (см):*\n(например: 45)");
+                } else {
+                    s.setState(UserState.WAITING_FOR_HIPS);
+                    sendText(chatId, "✅ Талия: " + String.format("%.0f", value) + " см\n\n📍 Шаг 5 из 5\n\n*Введите объём бёдер (см):*\n(например: 90)");
+                }
+            } else if (s.getState() == UserState.WAITING_FOR_HIPS) {
+                if (s.getGender().equals("male")) {
+                    s.getBodyMeasurements().put("shoulder", value);
+                    sendText(chatId, "✅ Плечи: " + String.format("%.0f", value) + " см\n\n🎉 *Данные собраны! Идет анализ...*");
+                } else {
+                    s.getBodyMeasurements().put("hips", value);
+                    sendText(chatId, "✅ Бёдра: " + String.format("%.0f", value) + " см\n\n🎉 *Данные собраны! Идет анализ...*");
+                }
+                finalizeMeasurements(chatId, s);
+            }
+        } catch (NumberFormatException e) {
+            sendText(chatId, "❌ Ошибка! Введите корректное число\n(без букв и спецсимволов)");
+        }
+    }
+    
+    private void finalizeMeasurements(Long chatId, UserSession s) {
+        try {
+            double rating = RatingUtils.evaluateBodyByMeasurements(s.getBodyMeasurements(), s.getGender());
+            s.setLastRating(rating);
+            String result = RatingUtils.generateMeasurementsMessage(s.getBodyMeasurements(), rating, s.isPremium(), s.getGender());
+            s.setState(UserState.SELECTING_GENDER);
+            sendText(chatId, result);
+            mainMenu(chatId);
+        } catch (Exception e) {
+            sendText(chatId, "❌ Ошибка при обработке данных. Попробуйте еще раз.");
+            e.printStackTrace();
         }
     }
     
@@ -203,27 +263,6 @@ public class RatingBot extends TelegramLongPollingBot {
         } catch (Exception e) {
             sendText(chatId, "❌ Ошибка при обработке фото. Попробуйте еще раз.");
             e.printStackTrace();
-        }
-    }
-    
-    private void handleMeasurements(Long chatId, String text, UserSession s) {
-        try {
-            Map<String, Double> measurements = new HashMap<>();
-            String[] parts = text.split(" ");
-            for (String part : parts) {
-                String[] kv = part.split(":");
-                if (kv.length == 2) {
-                    measurements.put(kv[0].toLowerCase(), Double.parseDouble(kv[1]));
-                }
-            }
-            
-            double rating = RatingUtils.evaluateBodyByMeasurements(measurements, s.getGender());
-            s.setLastRating(rating);
-            String result = RatingUtils.generateRatingMessage(rating, s.isPremium(), s.getGender());
-            sendText(chatId, result);
-            mainMenu(chatId);
-        } catch(Exception e) {
-            sendText(chatId, "❌ Неверный формат!\n\nИспользуйте: грудь:90 талия:65 бедра:90\n\nПример: грудь:90 талия:65 бедра:90");
         }
     }
     
