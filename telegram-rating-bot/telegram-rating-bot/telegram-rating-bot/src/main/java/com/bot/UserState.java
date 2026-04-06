@@ -1,9 +1,0 @@
-package com.bot;
-
-public enum UserState {
-    SELECTING_GENDER,
-    SELECTING_RATING_TYPE,
-    WAITING_FOR_PHOTO,
-    WAITING_FOR_MEASUREMENTS,
-    COMPARISON_MODE
-}
