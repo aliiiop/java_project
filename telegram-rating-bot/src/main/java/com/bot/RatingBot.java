@@ -14,7 +14,28 @@ public class RatingBot extends TelegramLongPollingBot {
     private final String BOT_TOKEN = "8762441185:AAHBI8LCr47AD6XJRx-bakOSLHfzGgTVpuk";
     private final String BOT_USERNAME = "Kara_Tabletka_Bot";
     private Map<Long, UserSession> users = new HashMap<>();
-    
+
+    public RatingBot() {
+        // Загружаем сохранённую историю при старте
+        Map<Long, List<UserSession.RatingHistoryEntry>> saved = HistoryStorage.loadAll();
+        for (Map.Entry<Long, List<UserSession.RatingHistoryEntry>> e : saved.entrySet()) {
+            UserSession s = new UserSession();
+            s.setHistory(e.getValue());
+            users.put(e.getKey(), s);
+        }
+        System.out.println("📜 Загружена история для " + users.size() + " пользователей");
+    }
+
+    private void persistHistory() {
+        Map<Long, List<UserSession.RatingHistoryEntry>> data = new HashMap<>();
+        for (Map.Entry<Long, UserSession> e : users.entrySet()) {
+            if (!e.getValue().getHistory().isEmpty()) {
+                data.put(e.getKey(), e.getValue().getHistory());
+            }
+        }
+        HistoryStorage.saveAll(data);
+    }
+
     @Override public String getBotUsername() { return BOT_USERNAME; }
     @Override public String getBotToken() { return BOT_TOKEN; }
     
@@ -52,6 +73,9 @@ public class RatingBot extends TelegramLongPollingBot {
                     return;
                 } else if (text.equals("❓ Помощь")) {
                     help(chatId);
+                    return;
+                } else if (text.equals("📜 История") || text.equals("/history")) {
+                    showHistory(chatId, session);
                     return;
                 }
                 
@@ -130,7 +154,7 @@ public class RatingBot extends TelegramLongPollingBot {
     }
     
     private void help(Long chatId) {
-        sendText(chatId, "🆘 *Помощь*\n\n/start - начать оценку\n/premium - премиум доступ\n/compare - сравнить со звездой\n\nПроцесс: выберите пол -> выберите тип оценки -> отправьте фото/замеры");
+        sendText(chatId, "🆘 *Помощь*\n\n/start - начать оценку\n/premium - премиум доступ\n/compare - сравнить со звездой\n/history - посмотреть историю ваших прошлых оценок (тип, балл, дата)\n\nПроцесс: выберите пол -> выберите тип оценки -> отправьте фото/замеры");
         mainMenu(chatId);
     }
     
@@ -233,6 +257,8 @@ public class RatingBot extends TelegramLongPollingBot {
         try {
             double rating = RatingUtils.evaluateBodyByMeasurements(s.getBodyMeasurements(), s.getGender());
             s.setLastRating(rating);
+            s.addHistoryEntry("measure", s.getGender(), rating);
+            persistHistory();
             String result = RatingUtils.generateMeasurementsMessage(s.getBodyMeasurements(), rating, s.isPremium(), s.getGender());
             s.setState(UserState.SELECTING_GENDER);
             sendText(chatId, result);
@@ -257,6 +283,8 @@ public class RatingBot extends TelegramLongPollingBot {
             }
             
             s.setLastRating(rating);
+            s.addHistoryEntry(s.getRatingType(), s.getGender(), rating);
+            persistHistory();
             String result = RatingUtils.generateRatingMessage(rating, s.isPremium(), s.getGender());
             sendText(chatId, result);
             mainMenu(chatId);
@@ -266,6 +294,31 @@ public class RatingBot extends TelegramLongPollingBot {
         }
     }
     
+    private void showHistory(Long chatId, UserSession s) {
+        List<UserSession.RatingHistoryEntry> history = s.getHistory();
+        if (history.isEmpty()) {
+            sendText(chatId, "📜 *История пуста*\n\nУ вас пока нет ни одной оценки.\nНажмите «🔄 Новая оценка», чтобы начать!");
+            mainMenu(chatId);
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder("📜 *История ваших оценок*\n");
+        sb.append("Всего: ").append(history.size()).append("\n\n");
+
+        int start = Math.max(0, history.size() - 10);
+        int idx = start + 1;
+        for (int i = start; i < history.size(); i++) {
+            sb.append(history.get(i).format(idx++)).append("\n\n");
+        }
+
+        if (start > 0) {
+            sb.append("_(показаны последние 10 из ").append(history.size()).append(")_");
+        }
+
+        sendText(chatId, sb.toString());
+        mainMenu(chatId);
+    }
+
     private void mainMenu(Long chatId) {
         SendMessage m = new SendMessage();
         m.setChatId(chatId.toString());
@@ -281,8 +334,11 @@ public class RatingBot extends TelegramLongPollingBot {
         rows.add(r1);
         KeyboardRow r2 = new KeyboardRow();
         r2.add("💎 Премиум");
-        r2.add("❓ Помощь");
+        r2.add("📜 История");
         rows.add(r2);
+        KeyboardRow r3 = new KeyboardRow();
+        r3.add("❓ Помощь");
+        rows.add(r3);
         kb.setKeyboard(rows);
         m.setReplyMarkup(kb);
         try { execute(m); } catch (TelegramApiException e) {}
