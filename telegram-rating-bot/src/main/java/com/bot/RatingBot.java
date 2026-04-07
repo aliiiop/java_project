@@ -209,7 +209,7 @@ public class RatingBot extends TelegramLongPollingBot {
                 s.getBodyMeasurements().put("waist", value);
                 if (s.getGender().equals("male")) {
                     s.setState(UserState.WAITING_FOR_HIPS);
-                    sendText(chatId, "✅ Талия: " + String.format("%.0f", value) + " см\n\n📍 Шаг 5 из 5\n\n*Введите ширину плеч (см):*\n(например: 45)");
+                    sendText(chatId, "✅ Талия: " + String.format("%.0f", value) + " см\n\n📍 Шаг 5 из 5\n\n*Введите ширину плеч (см):*\n(например: 110)");
                 } else {
                     s.setState(UserState.WAITING_FOR_HIPS);
                     sendText(chatId, "✅ Талия: " + String.format("%.0f", value) + " см\n\n📍 Шаг 5 из 5\n\n*Введите объём бёдер (см):*\n(например: 90)");
