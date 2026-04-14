@@ -1,0 +1,7 @@
+/target/
+*.class
+/user_sessions.json
+/com/
+/CheckOutput.java
+/SimpleBot.java
+/TestBot.java
