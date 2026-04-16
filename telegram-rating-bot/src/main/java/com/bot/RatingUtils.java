@@ -131,13 +131,108 @@ public class RatingUtils {
         return Math.max(1.0, Math.min(10.0, rating));
     }
     public static String generateRatingMessage(double rating, boolean premium, String gender) {
-        String msg = "🌟 *Ваша оценка: " + String.format("%.1f", rating) + " PSL* 🌟\n\n";
-        if (premium) msg += "🔍 *Детальный разбор:*\n" + (rating<3.5?"Низкий уровень":rating<5.5?"Средний уровень":"Высокий уровень") + "\n\n";
-        else msg += "💰 Премиум доступ: /premium\n\n";
-        msg += "📈 *Потенциал:* " + (rating<4?"Низкий":rating<7?"Средний":"Высокий") + "\n";
-        msg += (rating<3.5?"\n🎭 *ЭДИТ: ТЕБЯ МОГГАЮТ* 👎":rating<=5.5?"\n🎭 *ЭДИТ: НЕЙТРАЛЬНО* 😐":"\n🎭 *ЭДИТ: ТЫ МОГГАЕШЬ!* 🔥");
-        if (rating<4) msg += "\n\n⚪ *WHITE PILL* ⚪\nВнешность не главное. Развивайся! 💪";
-        return msg;
+        StringBuilder msg = new StringBuilder();
+        msg.append("🌟 *ВАШ РЕЙТИНГ: ").append(String.format("%.1f", rating)).append("/10 PSL* 🌟\n\n");
+
+        if (!premium) {
+            // === БЕСПЛАТНАЯ ВЕРСИЯ ===
+            msg.append("📈 *Потенциал:* ").append(rating < 4 ? "Низкий" : rating < 7 ? "Средний" : "Высокий").append("\n");
+            msg.append(rating < 3.5 ? "\n🎭 *ЭДИТ: ТЕБЯ МОГГАЮТ* 👎" : rating <= 5.5 ? "\n🎭 *ЭДИТ: НЕЙТРАЛЬНО* 😐" : "\n🎭 *ЭДИТ: ТЫ МОГГАЕШЬ!* 🔥");
+            if (rating < 4) msg.append("\n\n⚪ *WHITE PILL* ⚪\nВнешность не главное. Развивайся! 💪");
+            msg.append("\n\n━━━━━━━━━━━━━━━━━━━\n");
+            msg.append("🔒 *Хочешь подробный разбор?*\n");
+            msg.append("💎 Нажми «Премиум» для:\n");
+            msg.append("• Детального анализа лица/тела\n");
+            msg.append("• Персональных рекомендаций\n");
+            msg.append("• Плана улучшения внешности\n");
+        } else {
+            // === ПРЕМИУМ ВЕРСИЯ ===
+            msg.append("═══════════════════════════════\n");
+            msg.append("💎 *ПРЕМИУМ АНАЛИЗ*\n");
+            msg.append("═══════════════════════════════\n\n");
+
+            if (rating < 3.5) {
+                msg.append("📊 *УРОВЕНЬ: ТРЕБУЕТ РАБОТЫ*\n\n");
+                msg.append("🔍 *ДЕТАЛЬНЫЙ РАЗБОР:*\n");
+                msg.append("Твой профиль сейчас ниже среднего.\n");
+                msg.append("Но это НЕ приговор — это отправная точка!\n\n");
+                msg.append("🎯 *ПЛАН ДЕЙСТВИЙ:*\n\n");
+                msg.append("1️⃣ *Физическая форма:*\n");
+                msg.append("   • Тренировки 4-5 раз в неделю\n");
+                msg.append("   • Силовые для мышечного корсета\n");
+                msg.append("   • Кардио 3 раза для рельефа\n\n");
+                msg.append("2️⃣ *Питание:*\n");
+                msg.append("   • Белки: 1.5-2г на кг веса\n");
+                msg.append("   • Дефицит калорий для сушки\n");
+                msg.append("   • Вода: 2-3л в день\n\n");
+                msg.append("3️⃣ *Внешний вид:*\n");
+                msg.append("   • Уход за кожей (очищение + увлажнение)\n");
+                msg.append("   • Стильная причёска под тип лица\n");
+                msg.append("   • Подбор гардероба\n\n");
+                msg.append("⏱ *Срок улучшения: 3-6 месяцев*\n");
+                msg.append("📈 *Потенциал: до 5.5-6.5*\n");
+            } else if (rating < 5.5) {
+                msg.append("📊 *УРОВЕНЬ: СРЕДНИЙ*\n\n");
+                msg.append("🔍 *ДЕТАЛЬНЫЙ РАЗБОР:*\n");
+                msg.append("Хорошая база! У тебя есть потенциал.\n\n");
+                msg.append("🎯 *ПЛАН УЛУЧШЕНИЯ:*\n\n");
+                msg.append("1️⃣ *Мышечная масса:*\n");
+                msg.append("   • Гипертрофия: 3-4 тренировки в неделю\n");
+                msg.append("   • Прогрессивная перегрузка\n");
+                msg.append("   • Фокус на плечи и спину\n\n");
+                msg.append("2️⃣ *Оптимизация пропорций:*\n");
+                msg.append("   • Снижение % жира до 12-15%\n");
+                msg.append("   • Улучшение осанки\n");
+                msg.append("   • Работа над V-образным силуэтом\n\n");
+                msg.append("3️⃣ *Стиль и имидж:*\n");
+                msg.append("   • Качественная одежда под тип фигуры\n");
+                msg.append("   • Уход за кожей и волосами\n");
+                msg.append("   • Аксессуары и детали\n\n");
+                msg.append("⏱ *Срок улучшения: 3-4 месяца*\n");
+                msg.append("📈 *Потенциал: до 7.0-8.0*\n");
+            } else if (rating < 8.0) {
+                msg.append("📊 *УРОВЕНЬ: ВЫШЕ СРЕДНЕГО* 💪\n\n");
+                msg.append("🔍 *ДЕТАЛЬНЫЙ РАЗБОР:*\n");
+                msg.append("Отличная форма! Ты уже впереди большинства.\n\n");
+                msg.append("🎯 *ТОНКАЯ НАСТРОЙКА:*\n\n");
+                msg.append("1️⃣ *Детализация тела:*\n");
+                msg.append("   • Специализированные тренировки\n");
+                msg.append("   • Работа над слабыми группами мышц\n");
+                msg.append("   • Снижение жира до 8-12%\n\n");
+                msg.append("2️⃣ *Максимизация внешности:*\n");
+                msg.append("   • Профессиональный уход за кожей\n");
+                msg.append("   • Оптимальная причёска\n");
+                msg.append("   • Премиальный стиль одежды\n\n");
+                msg.append("3️⃣ *Харизма:*\n");
+                msg.append("   • Уверенная осанка и походка\n");
+                msg.append("   • Язык тела\n");
+                msg.append("   • Социальные навыки\n\n");
+                msg.append("⏱ *Срок до элиты: 2-3 месяца*\n");
+                msg.append("📈 *Потенциал: до 8.5-9.0*\n");
+            } else {
+                msg.append("📊 *УРОВЕНЬ: ЭЛИТ* 👑\n\n");
+                msg.append("🔍 *ДЕТАЛЬНЫЙ РАЗБОР:*\n");
+                msg.append("Ты в топ 1%! Поздравляем!\n\n");
+                msg.append("🎯 *ПОДДЕРЖАНИЕ УРОВНЯ:*\n\n");
+                msg.append("1️⃣ *Консистентность:*\n");
+                msg.append("   • Регулярные тренировки\n");
+                msg.append("   • Дисциплина в питании\n");
+                msg.append("   • 7-8 часов сна\n\n");
+                msg.append("2️⃣ *Совершенствование:*\n");
+                msg.append("   • Инновационные методы тренировок\n");
+                msg.append("   • Персональный подход к питанию\n");
+                msg.append("   • Биохакинг и восстановление\n\n");
+                msg.append("3️⃣ *Личный бренд:*\n");
+                msg.append("   • Уникальный стиль\n");
+                msg.append("   • Уверенность и харизма\n");
+                msg.append("   • Премиум имидж\n\n");
+                msg.append("✨ *Ты МОГГЕР! Держи этот уровень!* ✨\n");
+            }
+
+            msg.append("\n═══════════════════════════════\n");
+        }
+
+        return msg.toString();
     }
     public static String generateMeasurementsMessage(Map<String, Double> measurements, double rating, boolean premium, String gender) {
         double height = measurements.getOrDefault("height", 175.0);
@@ -147,56 +242,136 @@ public class RatingUtils {
         double hips = measurements.getOrDefault("hips", 90.0);
         double shoulder = measurements.getOrDefault("shoulder", 45.0);
         double neck = measurements.getOrDefault("neck", 38.0);
-        
+
         double bmi = weight / ((height / 100.0) * (height / 100.0));
-        String msg = "🌟 *АНАЛИЗ ПО ЗАМЕРАМ: " + String.format("%.1f", rating) + " PSL* 🌟\n\n";
-        
-        if (gender.equals("male")) {
-            msg += "📊 *ПАРАМЕТРЫ:*\n";
-            msg += "• Рост: " + String.format("%.0f", height) + " см " + (height >= 175 && height <= 185 ? "✅" : "❌") + "\n";
-            msg += "• Вес: " + String.format("%.1f", weight) + " кг\n";
-            msg += "• BMI: " + String.format("%.1f", bmi) + " " + (bmi >= 18.5 && bmi <= 25.0 ? "✅ (идеально)" : "⚠️") + "\n";
-            msg += "• Плечи: " + String.format("%.1f", shoulder) + " см\n";
-            msg += "• Грудь: " + String.format("%.1f", chest) + " см\n";
-            msg += "• Талия: " + String.format("%.1f", waist) + " см\n";
-            msg += "• Шея: " + String.format("%.1f", neck) + " см\n\n";
-            
-            msg += "💪 *СООТНОШЕНИЯ:*\n";
-            double shoulderWaistRatio = shoulder / waist;
-            double chestWaistRatio = chest / waist;
-            msg += "• Плечи/Талия: " + String.format("%.2f", shoulderWaistRatio) + " " + (shoulderWaistRatio >= 1.5 && shoulderWaistRatio <= 1.7 ? "✅" : "⚠️") + "\n";
-            msg += "• Грудь/Талия: " + String.format("%.2f", chestWaistRatio) + " " + (chestWaistRatio >= 1.20 && chestWaistRatio <= 1.35 ? "✅" : "⚠️") + "\n\n";
+        StringBuilder msg = new StringBuilder();
+        msg.append("🌟 *АНАЛИЗ ПО ЗАМЕРАМ: ").append(String.format("%.1f", rating)).append("/10 PSL* 🌟\n\n");
+
+        if (!premium) {
+            // === БЕСПЛАТНАЯ ВЕРСИЯ — только базовые параметры ===
+            msg.append("📊 *ТВОИ ПАРАМЕТРЫ:*\n");
+            msg.append("• Рост: ").append(String.format("%.0f", height)).append(" см\n");
+            msg.append("• Вес: ").append(String.format("%.1f", weight)).append(" кг\n");
+            msg.append("• BMI: ").append(String.format("%.1f", bmi)).append("\n\n");
+
+            msg.append("🎯 *ИТОГ:*\n");
+            if (rating < 3.5) msg.append("🔴 *УРОВЕНЬ: ТРЕБУЕТ РАБОТЫ* 👎\n");
+            else if (rating < 5.5) msg.append("🟡 *УРОВЕНЬ: СРЕДНИЙ* 😐\n");
+            else if (rating < 8.0) msg.append("🟢 *УРОВЕНЬ: ХОРОШИЙ* 💪\n");
+            else msg.append("🟢 *УРОВЕНЬ: ЭЛИТ* 👑\n");
+
+            msg.append("\n━━━━━━━━━━━━━━━━━━━\n");
+            msg.append("🔒 *Хочешь полный разбор?*\n");
+            msg.append("💎 Нажми «Премиум» чтобы увидеть:\n");
+            msg.append("• Все соотношения с оценкой ✅/⚠️\n");
+            msg.append("• Какие мышцы качать\n");
+            msg.append("• Персональный план тренировок\n");
+            msg.append("• Рекомендации по питанию\n");
         } else {
-            msg += "📊 *ПАРАМЕТРЫ:*\n";
-            msg += "• Рост: " + String.format("%.0f", height) + " см " + (height >= 162 && height <= 175 ? "✅" : "❌") + "\n";
-            msg += "• Вес: " + String.format("%.1f", weight) + " кг\n";
-            msg += "• BMI: " + String.format("%.1f", bmi) + " " + (bmi >= 19.0 && bmi <= 24.0 ? "✅ (идеально)" : "⚠️") + "\n";
-            msg += "• Грудь: " + String.format("%.1f", chest) + " см " + (chest >= 85 && chest <= 95 ? "✅" : "⚠️") + "\n";
-            msg += "• Талия: " + String.format("%.1f", waist) + " см\n";
-            msg += "• Бёдра: " + String.format("%.1f", hips) + " см\n\n";
-            
-            msg += "✨ *ПРОПОРЦИИ:*\n";
-            double waistHipsRatio = waist / hips;
-            double chestWaistRatio = chest / waist;
-            msg += "• Талия/Бёдра: " + String.format("%.2f", waistHipsRatio) + " " + (waistHipsRatio >= 0.65 && waistHipsRatio <= 0.75 ? "✅ (идеально)" : "⚠️") + "\n";
-            msg += "• Грудь/Талия: " + String.format("%.2f", chestWaistRatio) + " " + (chestWaistRatio >= 0.85 && chestWaistRatio <= 0.95 ? "✅" : "⚠️") + "\n\n";
+            // === ПРЕМИУМ ВЕРСИЯ — полный анализ ===
+            msg.append("═══════════════════════════════\n");
+            msg.append("💎 *ПРЕМИУМ АНАЛИЗ ЗАМЕРОВ*\n");
+            msg.append("═══════════════════════════════\n\n");
+
+            if (gender.equals("male")) {
+                msg.append("📏 *ТВОИ ПАРАМЕТРЫ:*\n");
+                msg.append("• Рост: ").append(String.format("%.0f", height)).append(" см ").append(height >= 175 && height <= 185 ? "✅ идеально" : "⚠️").append("\n");
+                msg.append("• Вес: ").append(String.format("%.1f", weight)).append(" кг\n");
+                msg.append("• BMI: ").append(String.format("%.1f", bmi)).append(" ").append(bmi >= 18.5 && bmi <= 25.0 ? "✅ норма" : bmi < 18.5 ? "⚠️ недовес" : "⚠️ перевес").append("\n");
+                msg.append("• Плечи: ").append(String.format("%.0f", shoulder)).append(" см\n");
+                msg.append("• Грудь: ").append(String.format("%.0f", chest)).append(" см\n");
+                msg.append("• Талия: ").append(String.format("%.0f", waist)).append(" см\n");
+                msg.append("• Шея: ").append(String.format("%.0f", neck)).append(" см\n\n");
+
+                double swr = shoulder / waist;
+                double cwr = chest / waist;
+                msg.append("💪 *КЛЮЧЕВЫЕ СООТНОШЕНИЯ:*\n");
+                msg.append("• Плечи/Талия: ").append(String.format("%.2f", swr)).append(" ").append(swr >= 1.5 && swr <= 1.7 ? "✅ V-образный силуэт!" : "⚠️ нужна работа").append("\n");
+                msg.append("   _Идеал: 1.50-1.70_\n");
+                msg.append("• Грудь/Талия: ").append(String.format("%.2f", cwr)).append(" ").append(cwr >= 1.20 && cwr <= 1.35 ? "✅ отлично!" : "⚠️ нужна работа").append("\n");
+                msg.append("   _Идеал: 1.20-1.35_\n\n");
+
+                msg.append("🎯 *ПЕРСОНАЛЬНЫЕ РЕКОМЕНДАЦИИ:*\n\n");
+                if (swr < 1.5) {
+                    msg.append("📌 *Плечи слишком узкие:*\n");
+                    msg.append("   • Жим штанги стоя 4x8\n");
+                    msg.append("   • Махи гантелями в стороны 3x12\n");
+                    msg.append("   • Подтягивания широким хватом 4x10\n\n");
+                }
+                if (cwr < 1.2) {
+                    msg.append("📌 *Грудь нужно увеличить:*\n");
+                    msg.append("   • Жим лёжа 4x8\n");
+                    msg.append("   • Разведение гантелей 3x12\n");
+                    msg.append("   • Отжимания на брусьях 3x10\n\n");
+                }
+                if (waist > 85) {
+                    msg.append("📌 *Талия широкая — нужна сушка:*\n");
+                    msg.append("   • Кардио 30 мин 3-4 раза/неделю\n");
+                    msg.append("   • Дефицит калорий 300-500 ккал\n");
+                    msg.append("   • Планка и вакуум каждый день\n\n");
+                }
+                if (bmi > 25) {
+                    msg.append("📌 *Вес выше нормы:*\n");
+                    msg.append("   • Калории: ").append(String.format("%.0f", weight * 25)).append(" ккал/день\n");
+                    msg.append("   • Белок: ").append(String.format("%.0f", weight * 1.8)).append("г/день\n");
+                    msg.append("   • Углеводы: сократить на 30%\n\n");
+                } else if (bmi < 18.5) {
+                    msg.append("📌 *Вес ниже нормы:*\n");
+                    msg.append("   • Калории: ").append(String.format("%.0f", weight * 35)).append(" ккал/день\n");
+                    msg.append("   • Белок: ").append(String.format("%.0f", weight * 2.0)).append("г/день\n");
+                    msg.append("   • 5-6 приёмов пищи в день\n\n");
+                }
+            } else {
+                msg.append("📏 *ТВОИ ПАРАМЕТРЫ:*\n");
+                msg.append("• Рост: ").append(String.format("%.0f", height)).append(" см ").append(height >= 162 && height <= 175 ? "✅ идеально" : "⚠️").append("\n");
+                msg.append("• Вес: ").append(String.format("%.1f", weight)).append(" кг\n");
+                msg.append("• BMI: ").append(String.format("%.1f", bmi)).append(" ").append(bmi >= 19.0 && bmi <= 24.0 ? "✅ норма" : bmi < 19 ? "⚠️ недовес" : "⚠️ перевес").append("\n");
+                msg.append("• Грудь: ").append(String.format("%.0f", chest)).append(" см ").append(chest >= 85 && chest <= 95 ? "✅" : "⚠️").append("\n");
+                msg.append("• Талия: ").append(String.format("%.0f", waist)).append(" см\n");
+                msg.append("• Бёдра: ").append(String.format("%.0f", hips)).append(" см\n\n");
+
+                double whr = waist / hips;
+                double cwr = chest / waist;
+                msg.append("✨ *КЛЮЧЕВЫЕ ПРОПОРЦИИ:*\n");
+                msg.append("• Талия/Бёдра: ").append(String.format("%.2f", whr)).append(" ").append(whr >= 0.65 && whr <= 0.75 ? "✅ песочные часы!" : "⚠️ нужна работа").append("\n");
+                msg.append("   _Идеал: 0.65-0.75_\n");
+                msg.append("• Грудь/Талия: ").append(String.format("%.2f", cwr)).append(" ").append(cwr >= 0.85 && cwr <= 0.95 ? "✅ отлично!" : "⚠️ нужна работа").append("\n");
+                msg.append("   _Идеал: 0.85-0.95_\n\n");
+
+                msg.append("🎯 *ПЕРСОНАЛЬНЫЕ РЕКОМЕНДАЦИИ:*\n\n");
+                if (whr > 0.75) {
+                    msg.append("📌 *Талия широкая:*\n");
+                    msg.append("   • Кардио 30 мин 3-4 раза/неделю\n");
+                    msg.append("   • Дефицит калорий 200-400 ккал\n");
+                    msg.append("   • Вакуум живота каждое утро\n\n");
+                }
+                if (hips < 90) {
+                    msg.append("📌 *Бёдра нужно увеличить:*\n");
+                    msg.append("   • Приседания 4x12\n");
+                    msg.append("   • Выпады с гантелями 3x10\n");
+                    msg.append("   • Ягодичный мостик 4x15\n\n");
+                }
+                if (bmi > 24) {
+                    msg.append("📌 *Рекомендации по весу:*\n");
+                    msg.append("   • Калории: ").append(String.format("%.0f", weight * 23)).append(" ккал/день\n");
+                    msg.append("   • Белок: ").append(String.format("%.0f", weight * 1.5)).append("г/день\n");
+                    msg.append("   • Больше овощей и клетчатки\n\n");
+                }
+            }
+
+            msg.append("📅 *ПЛАН НА НЕДЕЛЮ:*\n");
+            msg.append("Пн — Силовая (верх тела)\n");
+            msg.append("Вт — Кардио 30 мин\n");
+            msg.append("Ср — Силовая (низ тела)\n");
+            msg.append("Чт — Отдых\n");
+            msg.append("Пт — Полная тренировка\n");
+            msg.append("Сб — Кардио + растяжка\n");
+            msg.append("Вс — Отдых\n");
+
+            msg.append("\n═══════════════════════════════\n");
         }
-        
-        msg += "🎯 *ИТОГ:*\n";
-        if (rating < 3.5) {
-            msg += "🔴 *УРОВЕНЬ: НЕ ДО КОНЦА* 👎\nНужна работа над телом. Начни с базы!";
-        } else if (rating < 5.0) {
-            msg += "🟡 *УРОВЕНЬ: СРЕДНИЙ* 😐\nХорошие базовые параметры. Есть где расти!";
-        } else if (rating < 7.0) {
-            msg += "🟢 *УРОВЕНЬ: ХОРОШИЙ* 💪\nТвоё тело - наш аналог!";
-        } else if (rating < 8.5) {
-            msg += "🟢 *УРОВЕНЬ: ОТЛИЧНЫЙ* 🔥\nТы на пике! Держи форму!";
-        } else {
-            msg += "🟢 *УРОВЕНЬ: ЭЛИТ* 👑\nТы за гранью добра и зла. МОГГЕР 2000!";
-        }
-        
-        if (!premium) msg += "\n\n💰 Премиум разбор: /premium";
-        return msg;
+
+        return msg.toString();
     }
     public static String compareToCelebrity(double rating, String gender) {
         String[] celebs = gender.equals("male") ? new String[]{"Генри Кавилл (9.5)","Тимоти Шаламе (8.0)"} : new String[]{"Марго Робби (9.5)","Зендая (8.5)"};
