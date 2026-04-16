@@ -24,14 +24,16 @@ public class HistoryStorage {
 
     public static synchronized Map<Long, List<UserSession.RatingHistoryEntry>> loadAll() {
         File f = new File(FILE_PATH);
-        if (!f.exists()) return createEmptyHistory();
+        if (!f.exists()) {
+            return new HashMap<>();
+        }
 
         try (Reader r = new FileReader(f)) {
             Map<Long, List<UserSession.RatingHistoryEntry>> data = GSON.fromJson(r, TYPE);
             return data == null ? new HashMap<>() : data;
         } catch (Exception e) {
             System.err.println("Не удалось загрузить историю: " + e.getMessage());
-            return createEmptyHistory();
+            return new HashMap<>();
         }
     }
 

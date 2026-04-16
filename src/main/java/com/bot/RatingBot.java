@@ -147,7 +147,68 @@ public class RatingBot extends TelegramLongPollingBot {
         String premiumInfo = s.isPremium()
             ? "\n\n💎 У вас активен premium: подробный разбор, советы и полная история."
             : "\n\n💎 Premium открывает детальный разбор, советы по улучшению и статистику по истории.";
-        sendText(chatId, "🆘 *Помощь*\n\n/start - начать оценку\n/undo - отменить последний шаг\n/premium - premium доступ\n/compare - сравнить со звездой\n/history - посмотреть историю ваших прошлых оценок\n\nПроцесс: выберите пол -> выберите тип оценки -> отправьте фото или введите замеры" + premiumInfo);
+
+        Map<String, String> commands = new HashMap<>();
+        commands.put("/start", "начать новую оценку");
+        commands.put("/undo", "отменить последний шаг");
+        commands.put("/history", "посмотреть прошлые оценки");
+        commands.put("/compare", "сравнить последний результат со звездой");
+        commands.put("/premium", "открыть premium-возможности");
+
+        ArrayList<String> commandOrder = new ArrayList<>();
+        commandOrder.add("/start");
+        commandOrder.add("/undo");
+        commandOrder.add("/history");
+        commandOrder.add("/compare");
+        commandOrder.add("/premium");
+
+        ArrayList<String> helpSections = new ArrayList<>();
+        helpSections.add("🆘 *Помощь*");
+
+        StringBuilder commandsText = new StringBuilder("*Команды:*\n");
+        for (String command : commandOrder) {
+            commandsText.append(command)
+                .append(" - ")
+                .append(commands.get(command))
+                .append("\n");
+        }
+        helpSections.add(commandsText.toString().trim());
+
+        helpSections.add(
+            "*Кнопки в меню:*\n" +
+            "🔄 Новая оценка - начать новую проверку с нуля\n" +
+            "⭐ Сравнить со звездой - доступно после получения последней оценки\n" +
+            "📜 История - открыть список ваших прошлых результатов\n" +
+            "❓ Помощь - заново показать эту справку\n" +
+            UNDO_BUTTON + " - откатить предыдущий шаг"
+        );
+
+        helpSections.add(
+            "*Как проходит оценка:*\n" +
+            "1. Выберите пол\n" +
+            "2. Выберите тип оценки: лицо по фото, тело по фото или тело по замерам\n" +
+            "3. Отправьте фото либо по очереди введите все нужные замеры\n" +
+            "4. Получите итоговый балл и при желании откройте историю или сравнение"
+        );
+
+        helpSections.add(
+            "*Подсказки:*\n" +
+            "• Для фото лучше отправлять чёткое и свежее изображение\n" +
+            "• Для лица подходит фото анфас при хорошем освещении\n" +
+            "• Для тела лучше использовать фото в полный рост\n" +
+            "• Замеры вводите только числами, без букв и лишних символов"
+        );
+
+        StringBuilder helpText = new StringBuilder();
+        for (int i = 0; i < helpSections.size(); i++) {
+            if (i > 0) {
+                helpText.append("\n\n");
+            }
+            helpText.append(helpSections.get(i));
+        }
+        helpText.append(premiumInfo);
+
+        sendText(chatId, helpText.toString());
         mainMenu(chatId);
     }
 
