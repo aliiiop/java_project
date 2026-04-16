@@ -1,7 +1,11 @@
 package com.bot;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 public class UserSession {
     private static final DateTimeFormatter PREMIUM_FORMATTER =
         DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
@@ -14,6 +18,7 @@ public class UserSession {
     private double lastRating;
     private Map<String, Double> bodyMeasurements = new HashMap<>();
     private List<RatingHistoryEntry> history = new ArrayList<>();
+    private LinkedList<UndoAction> undoActions = new LinkedList<>();
     public List<RatingHistoryEntry> getHistory() { return history; }
     public void setHistory(List<RatingHistoryEntry> history) { this.history = history; }
     public void addHistoryEntry(String ratingType, String gender, double rating) {
@@ -56,6 +61,21 @@ public class UserSession {
     public double getLastRating() { return lastRating; }
     public void setLastRating(double lastRating) { this.lastRating = lastRating; }
     public Map<String, Double> getBodyMeasurements() { return bodyMeasurements; }
+    public void pushUndoAction(UserState previousState, String previousGender, String previousRatingType, String measurementKeyToRemove) {
+        undoActions.addLast(new UndoAction(previousState, previousGender, previousRatingType, measurementKeyToRemove));
+    }
+    public boolean undoLastAction() {
+        if (undoActions.isEmpty()) return false;
+        UndoAction action = undoActions.removeLast();
+        state = action.previousState;
+        gender = action.previousGender;
+        ratingType = action.previousRatingType;
+        if (action.measurementKeyToRemove != null) {
+            bodyMeasurements.remove(action.measurementKeyToRemove);
+        }
+        return true;
+    }
+    public void clearUndoActions() { undoActions.clear(); }
     public boolean hasPersistentData() {
         return isPremium() || !history.isEmpty();
     }
@@ -114,5 +134,30 @@ public class UserSession {
             return String.format("%d. %s %s — *%.1f/10*\n   _%s_",
                 index, getGenderLabel(), getTypeLabel(), rating, timestamp);
         }
+    }
+
+    public static class UndoAction {
+        private UserState previousState;
+        private String previousGender;
+        private String previousRatingType;
+        private String measurementKeyToRemove;
+
+        public UndoAction() {}
+
+        public UndoAction(UserState previousState, String previousGender, String previousRatingType, String measurementKeyToRemove) {
+            this.previousState = previousState;
+            this.previousGender = previousGender;
+            this.previousRatingType = previousRatingType;
+            this.measurementKeyToRemove = measurementKeyToRemove;
+        }
+
+        public UserState getPreviousState() { return previousState; }
+        public void setPreviousState(UserState previousState) { this.previousState = previousState; }
+        public String getPreviousGender() { return previousGender; }
+        public void setPreviousGender(String previousGender) { this.previousGender = previousGender; }
+        public String getPreviousRatingType() { return previousRatingType; }
+        public void setPreviousRatingType(String previousRatingType) { this.previousRatingType = previousRatingType; }
+        public String getMeasurementKeyToRemove() { return measurementKeyToRemove; }
+        public void setMeasurementKeyToRemove(String measurementKeyToRemove) { this.measurementKeyToRemove = measurementKeyToRemove; }
     }
 }

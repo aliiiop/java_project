@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 public class RatingBot extends TelegramLongPollingBot {
+    private static final String UNDO_BUTTON = "↩️ Отменить шаг";
 
     private final String BOT_TOKEN = "8762441185:AAHBI8LCr47AD6XJRx-bakOSLHfzGgTVpuk";
     private final String BOT_USERNAME = "Kara_Tabletka_Bot";
@@ -75,6 +76,9 @@ public class RatingBot extends TelegramLongPollingBot {
                 } else if (text.equals("📜 История") || text.equals("/history")) {
                     showHistory(chatId, session);
                     return;
+                } else if (text.equals("/undo") || text.equals(UNDO_BUTTON)) {
+                    undo(chatId, session);
+                    return;
                 }
 
                 if (session.getState() == UserState.WAITING_FOR_HEIGHT ||
@@ -110,22 +114,11 @@ public class RatingBot extends TelegramLongPollingBot {
     }
 
     private void start(Long chatId, UserSession s) {
+        s.clearUndoActions();
+        s.getBodyMeasurements().clear();
+        s.setRatingType(null);
         s.setState(UserState.SELECTING_GENDER);
-
-        SendMessage m = new SendMessage();
-        m.setChatId(chatId.toString());
-        m.setText("👋 Добро пожаловать в бот оценки внешности!\n\nВыберите ваш пол:");
-
-        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
-        kb.setResizeKeyboard(true);
-        List<KeyboardRow> rows = new ArrayList<>();
-        KeyboardRow row = new KeyboardRow();
-        row.add("👨 Мужчина");
-        row.add("👩 Женщина");
-        rows.add(row);
-        kb.setKeyboard(rows);
-        m.setReplyMarkup(kb);
-        try { execute(m); } catch (TelegramApiException e) {}
+        showGenderMenu(chatId);
     }
 
     private void premium(Long chatId, UserSession s) {
@@ -154,11 +147,13 @@ public class RatingBot extends TelegramLongPollingBot {
         String premiumInfo = s.isPremium()
             ? "\n\n💎 У вас активен premium: подробный разбор, советы и полная история."
             : "\n\n💎 Premium открывает детальный разбор, советы по улучшению и статистику по истории.";
-        sendText(chatId, "🆘 *Помощь*\n\n/start - начать оценку\n/premium - premium доступ\n/compare - сравнить со звездой\n/history - посмотреть историю ваших прошлых оценок\n\nПроцесс: выберите пол -> выберите тип оценки -> отправьте фото или введите замеры" + premiumInfo);
+        sendText(chatId, "🆘 *Помощь*\n\n/start - начать оценку\n/undo - отменить последний шаг\n/premium - premium доступ\n/compare - сравнить со звездой\n/history - посмотреть историю ваших прошлых оценок\n\nПроцесс: выберите пол -> выберите тип оценки -> отправьте фото или введите замеры" + premiumInfo);
         mainMenu(chatId);
     }
 
     private void handleGenderSelection(Long chatId, String text, UserSession s) {
+        String previousGender = s.getGender();
+        String previousRatingType = s.getRatingType();
         if (text.equals("👨 Мужчина")) {
             s.setGender("male");
         } else if (text.equals("👩 Женщина")) {
@@ -168,42 +163,28 @@ public class RatingBot extends TelegramLongPollingBot {
             return;
         }
 
+        s.pushUndoAction(UserState.SELECTING_GENDER, previousGender, previousRatingType, null);
         s.setState(UserState.SELECTING_RATING_TYPE);
-
-        SendMessage m = new SendMessage();
-        m.setChatId(chatId.toString());
-        m.setText("📋 Выберите тип оценки:");
-
-        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
-        kb.setResizeKeyboard(true);
-        List<KeyboardRow> rows = new ArrayList<>();
-        KeyboardRow r1 = new KeyboardRow();
-        r1.add("📸 Оценка лица по фото");
-        r1.add("🏃 Оценка тела по фото");
-        rows.add(r1);
-        KeyboardRow r2 = new KeyboardRow();
-        r2.add("📏 Оценка тела по замерам");
-        rows.add(r2);
-        kb.setKeyboard(rows);
-        m.setReplyMarkup(kb);
-        try { execute(m); } catch (TelegramApiException e) {}
+        showRatingTypeMenu(chatId);
     }
 
     private void handleRatingTypeSelection(Long chatId, String text, UserSession s) {
+        s.pushUndoAction(UserState.SELECTING_RATING_TYPE, s.getGender(), s.getRatingType(), null);
         if (text.equals("📸 Оценка лица по фото")) {
             s.setRatingType("face");
             s.setState(UserState.WAITING_FOR_PHOTO);
-            sendText(chatId, "📸 Отправьте фото лица\n\nТребования: четкое фото, анфас, хорошее освещение");
+            sendPhotoPrompt(chatId, s);
         } else if (text.equals("🏃 Оценка тела по фото")) {
             s.setRatingType("body");
             s.setState(UserState.WAITING_FOR_PHOTO);
-            sendText(chatId, "📸 Отправьте фото тела\n\nТребования: четкое фото, в полный рост");
+            sendPhotoPrompt(chatId, s);
         } else if (text.equals("📏 Оценка тела по замерам")) {
             s.setRatingType("measure");
             s.getBodyMeasurements().clear();
             s.setState(UserState.WAITING_FOR_HEIGHT);
-            sendText(chatId, "📏 *ПОШАГОВЫЙ ВВОД ЗАМЕРОВ*\n\n📍 Шаг 1 из 5\n\n*Введите ваш рост (см):*\n(например: 175)");
+            sendMeasurementPrompt(chatId, s);
         } else {
+            s.undoLastAction();
             sendText(chatId, "❌ Используйте кнопки");
         }
     }
@@ -218,31 +199,36 @@ public class RatingBot extends TelegramLongPollingBot {
             }
 
             if (s.getState() == UserState.WAITING_FOR_HEIGHT) {
+                s.pushUndoAction(UserState.WAITING_FOR_HEIGHT, s.getGender(), s.getRatingType(), "height");
                 s.getBodyMeasurements().put("height", value);
                 s.setState(UserState.WAITING_FOR_WEIGHT);
-                sendText(chatId, "✅ Рост: " + String.format("%.0f", value) + " см\n\n📍 Шаг 2 из 5\n\n*Введите ваш вес (кг):*\n(например: 75)");
+                sendMeasurementPrompt(chatId, s, "✅ Рост: " + String.format("%.0f", value) + " см");
             } else if (s.getState() == UserState.WAITING_FOR_WEIGHT) {
+                s.pushUndoAction(UserState.WAITING_FOR_WEIGHT, s.getGender(), s.getRatingType(), "weight");
                 s.getBodyMeasurements().put("weight", value);
                 s.setState(UserState.WAITING_FOR_CHEST);
-                sendText(chatId, "✅ Вес: " + String.format("%.1f", value) + " кг\n\n📍 Шаг 3 из 5\n\n*Введите объём груди (см):*\n(например: 100)");
+                sendMeasurementPrompt(chatId, s, "✅ Вес: " + String.format("%.1f", value) + " кг");
             } else if (s.getState() == UserState.WAITING_FOR_CHEST) {
+                s.pushUndoAction(UserState.WAITING_FOR_CHEST, s.getGender(), s.getRatingType(), "chest");
                 s.getBodyMeasurements().put("chest", value);
                 s.setState(UserState.WAITING_FOR_WAIST);
-                sendText(chatId, "✅ Грудь: " + String.format("%.0f", value) + " см\n\n📍 Шаг 4 из 5\n\n*Введите объём талии (см):*\n(например: 80)");
+                sendMeasurementPrompt(chatId, s, "✅ Грудь: " + String.format("%.0f", value) + " см");
             } else if (s.getState() == UserState.WAITING_FOR_WAIST) {
+                s.pushUndoAction(UserState.WAITING_FOR_WAIST, s.getGender(), s.getRatingType(), "waist");
                 s.getBodyMeasurements().put("waist", value);
                 if (s.getGender().equals("male")) {
                     s.setState(UserState.WAITING_FOR_HIPS);
-                    sendText(chatId, "✅ Талия: " + String.format("%.0f", value) + " см\n\n📍 Шаг 5 из 5\n\n*Введите ширину плеч (см):*\n(например: 110)");
                 } else {
                     s.setState(UserState.WAITING_FOR_HIPS);
-                    sendText(chatId, "✅ Талия: " + String.format("%.0f", value) + " см\n\n📍 Шаг 5 из 5\n\n*Введите объём бёдер (см):*\n(например: 90)");
                 }
+                sendMeasurementPrompt(chatId, s, "✅ Талия: " + String.format("%.0f", value) + " см");
             } else if (s.getState() == UserState.WAITING_FOR_HIPS) {
                 if (s.getGender().equals("male")) {
+                    s.pushUndoAction(UserState.WAITING_FOR_HIPS, s.getGender(), s.getRatingType(), "shoulder");
                     s.getBodyMeasurements().put("shoulder", value);
                     sendText(chatId, "✅ Плечи: " + String.format("%.0f", value) + " см\n\n🎉 *Данные собраны! Идет анализ...*");
                 } else {
+                    s.pushUndoAction(UserState.WAITING_FOR_HIPS, s.getGender(), s.getRatingType(), "hips");
                     s.getBodyMeasurements().put("hips", value);
                     sendText(chatId, "✅ Бёдра: " + String.format("%.0f", value) + " см\n\n🎉 *Данные собраны! Идет анализ...*");
                 }
@@ -263,6 +249,7 @@ public class RatingBot extends TelegramLongPollingBot {
             String result = RatingUtils.generateMeasurementsMessage(
                 s.getBodyMeasurements(), rating, s.isPremium(), s.getGender(), previousRating
             );
+            s.clearUndoActions();
             s.setState(UserState.SELECTING_GENDER);
             sendText(chatId, result);
             mainMenu(chatId);
@@ -291,6 +278,7 @@ public class RatingBot extends TelegramLongPollingBot {
             String result = RatingUtils.generateRatingMessage(
                 rating, s.isPremium(), s.getGender(), previousRating, s.getRatingType()
             );
+            s.clearUndoActions();
             s.setState(UserState.SELECTING_GENDER);
             sendText(chatId, result);
             mainMenu(chatId);
@@ -376,17 +364,155 @@ public class RatingBot extends TelegramLongPollingBot {
         rows.add(r2);
         KeyboardRow r3 = new KeyboardRow();
         r3.add("❓ Помощь");
+        r3.add(UNDO_BUTTON);
         rows.add(r3);
         kb.setKeyboard(rows);
         m.setReplyMarkup(kb);
         try { execute(m); } catch (TelegramApiException e) {}
     }
 
+    private void undo(Long chatId, UserSession s) {
+        if (!s.undoLastAction()) {
+            sendText(chatId, "↩️ Нечего отменять.");
+            return;
+        }
+        sendStatePrompt(chatId, s, "↩️ Последний шаг отменён.");
+    }
+
+    private void sendStatePrompt(Long chatId, UserSession s, String prefix) {
+        StringBuilder text = new StringBuilder();
+        if (prefix != null && !prefix.isBlank()) {
+            text.append(prefix).append("\n\n");
+        }
+
+        if (s.getState() == UserState.SELECTING_GENDER) {
+            showGenderMenu(chatId, text.append("Выберите ваш пол:").toString());
+            return;
+        }
+        if (s.getState() == UserState.SELECTING_RATING_TYPE) {
+            showRatingTypeMenu(chatId, text.append("📋 Выберите тип оценки:").toString());
+            return;
+        }
+        if (s.getState() == UserState.WAITING_FOR_PHOTO) {
+            sendPhotoPrompt(chatId, s, text.toString());
+            return;
+        }
+        if (s.getState() == UserState.WAITING_FOR_HEIGHT ||
+            s.getState() == UserState.WAITING_FOR_WEIGHT ||
+            s.getState() == UserState.WAITING_FOR_CHEST ||
+            s.getState() == UserState.WAITING_FOR_WAIST ||
+            s.getState() == UserState.WAITING_FOR_HIPS) {
+            sendMeasurementPrompt(chatId, s, text.toString().trim());
+            return;
+        }
+
+        mainMenu(chatId);
+    }
+
+    private void showGenderMenu(Long chatId) {
+        showGenderMenu(chatId, "👋 Добро пожаловать в бот оценки внешности!\n\nВыберите ваш пол:");
+    }
+
+    private void showGenderMenu(Long chatId, String text) {
+        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
+        kb.setResizeKeyboard(true);
+        List<KeyboardRow> rows = new ArrayList<>();
+        KeyboardRow row = new KeyboardRow();
+        row.add("👨 Мужчина");
+        row.add("👩 Женщина");
+        rows.add(row);
+        KeyboardRow undoRow = new KeyboardRow();
+        undoRow.add(UNDO_BUTTON);
+        rows.add(undoRow);
+        kb.setKeyboard(rows);
+        sendText(chatId, text, kb);
+    }
+
+    private void showRatingTypeMenu(Long chatId) {
+        showRatingTypeMenu(chatId, "📋 Выберите тип оценки:");
+    }
+
+    private void showRatingTypeMenu(Long chatId, String text) {
+        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
+        kb.setResizeKeyboard(true);
+        List<KeyboardRow> rows = new ArrayList<>();
+        KeyboardRow r1 = new KeyboardRow();
+        r1.add("📸 Оценка лица по фото");
+        r1.add("🏃 Оценка тела по фото");
+        rows.add(r1);
+        KeyboardRow r2 = new KeyboardRow();
+        r2.add("📏 Оценка тела по замерам");
+        rows.add(r2);
+        KeyboardRow undoRow = new KeyboardRow();
+        undoRow.add(UNDO_BUTTON);
+        rows.add(undoRow);
+        kb.setKeyboard(rows);
+        sendText(chatId, text, kb);
+    }
+
+    private void sendPhotoPrompt(Long chatId, UserSession s) {
+        sendPhotoPrompt(chatId, s, "");
+    }
+
+    private void sendPhotoPrompt(Long chatId, UserSession s, String prefix) {
+        String baseText = "face".equals(s.getRatingType())
+            ? "📸 Отправьте фото лица\n\nТребования: четкое фото, анфас, хорошее освещение"
+            : "📸 Отправьте фото тела\n\nТребования: четкое фото, в полный рост";
+        sendText(chatId, joinPrefix(prefix, baseText), buildUndoKeyboard());
+    }
+
+    private void sendMeasurementPrompt(Long chatId, UserSession s) {
+        sendMeasurementPrompt(chatId, s, null);
+    }
+
+    private void sendMeasurementPrompt(Long chatId, UserSession s, String prefix) {
+        String prompt;
+        if (s.getState() == UserState.WAITING_FOR_HEIGHT) {
+            prompt = "📏 *ПОШАГОВЫЙ ВВОД ЗАМЕРОВ*\n\n📍 Шаг 1 из 5\n\n*Введите ваш рост (см):*\n(например: 175)";
+        } else if (s.getState() == UserState.WAITING_FOR_WEIGHT) {
+            prompt = "📍 Шаг 2 из 5\n\n*Введите ваш вес (кг):*\n(например: 75)";
+        } else if (s.getState() == UserState.WAITING_FOR_CHEST) {
+            prompt = "📍 Шаг 3 из 5\n\n*Введите объём груди (см):*\n(например: 100)";
+        } else if (s.getState() == UserState.WAITING_FOR_WAIST) {
+            prompt = "📍 Шаг 4 из 5\n\n*Введите объём талии (см):*\n(например: 80)";
+        } else if ("male".equals(s.getGender())) {
+            prompt = "📍 Шаг 5 из 5\n\n*Введите ширину плеч (см):*\n(например: 110)";
+        } else {
+            prompt = "📍 Шаг 5 из 5\n\n*Введите объём бёдер (см):*\n(например: 90)";
+        }
+        sendText(chatId, joinPrefix(prefix, prompt), buildUndoKeyboard());
+    }
+
+    private ReplyKeyboardMarkup buildUndoKeyboard() {
+        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
+        kb.setResizeKeyboard(true);
+        List<KeyboardRow> rows = new ArrayList<>();
+        KeyboardRow row = new KeyboardRow();
+        row.add(UNDO_BUTTON);
+        rows.add(row);
+        kb.setKeyboard(rows);
+        return kb;
+    }
+
+    private String joinPrefix(String prefix, String body) {
+        if (prefix == null || prefix.isBlank()) {
+            return body;
+        }
+        return prefix + "\n\n" + body;
+    }
+
     private void sendText(Long chatId, String text) {
+        sendText(chatId, text, null);
+    }
+
+    private void sendText(Long chatId, String text, ReplyKeyboardMarkup keyboard) {
         SendMessage m = new SendMessage();
         m.setChatId(chatId.toString());
         m.setText(text);
         m.setParseMode("Markdown");
+        if (keyboard != null) {
+            m.setReplyMarkup(keyboard);
+        }
         try { execute(m); } catch (TelegramApiException e) {
             System.err.println("Ошибка отправки: " + e.getMessage());
         }
