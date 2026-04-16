@@ -10,7 +10,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -302,23 +302,18 @@ public class RatingBot extends TelegramLongPollingBot {
         if (s.isPremium()) {
             double best = 0.0;
             double sum = 0.0;
-            Map<String, Integer> byType = new LinkedHashMap<>();
+            Map<String, Integer> byType = countHistoryByType(history);
             for (UserSession.RatingHistoryEntry entry : history) {
                 sum += entry.getRating();
                 best = Math.max(best, entry.getRating());
-                byType.merge(entry.getRatingType(), 1, Integer::sum);
             }
             double average = sum / history.size();
+            String typeSummary = buildTypeSummary(byType);
             sb.append("💎 *Премиум-статистика*\n");
             sb.append("Средний балл: ").append(String.format("%.2f", average)).append("\n");
             sb.append("Лучший балл: ").append(String.format("%.1f", best)).append("\n");
             sb.append("По типам: ");
-            boolean first = true;
-            for (Map.Entry<String, Integer> entry : byType.entrySet()) {
-                if (!first) sb.append(", ");
-                sb.append(RatingUtils.getRatingTypeLabel(entry.getKey())).append(" - ").append(entry.getValue());
-                first = false;
-            }
+            sb.append(typeSummary);
             sb.append("\n\n");
 
             int idx = 1;
@@ -331,18 +326,69 @@ public class RatingBot extends TelegramLongPollingBot {
             return;
         }
 
-        int start = Math.max(0, history.size() - 10);
-        int idx = start + 1;
-        for (int i = start; i < history.size(); i++) {
-            sb.append(history.get(i).format(idx++)).append("\n\n");
+        List<UserSession.RatingHistoryEntry> recentHistory = getRecentHistory(history, 10);
+        int idx = history.size() - recentHistory.size() + 1;
+        for (UserSession.RatingHistoryEntry entry : recentHistory) {
+            sb.append(entry.format(idx++)).append("\n\n");
         }
 
-        if (start > 0) {
+        if (history.size() > recentHistory.size()) {
             sb.append("_(показаны последние 10 из ").append(history.size()).append(")_");
         }
 
         sendText(chatId, sb.toString());
         mainMenu(chatId);
+    }
+
+    private Map<String, Integer> countHistoryByType(List<UserSession.RatingHistoryEntry> history) {
+        HashMap<String, Integer> byType = new HashMap<>();
+        for (UserSession.RatingHistoryEntry entry : history) {
+            byType.merge(entry.getRatingType(), 1, Integer::sum);
+        }
+        return byType;
+    }
+
+    private List<UserSession.RatingHistoryEntry> getRecentHistory(
+        List<UserSession.RatingHistoryEntry> history, int limit
+    ) {
+        ArrayList<UserSession.RatingHistoryEntry> recentHistory = new ArrayList<>();
+        if (limit <= 0) {
+            return recentHistory;
+        }
+
+        LinkedList<UserSession.RatingHistoryEntry> recentQueue = new LinkedList<>();
+        for (UserSession.RatingHistoryEntry entry : history) {
+            recentQueue.addLast(entry);
+            if (recentQueue.size() > limit) {
+                recentQueue.removeFirst();
+            }
+        }
+
+        recentHistory.addAll(recentQueue);
+        return recentHistory;
+    }
+
+    private String buildTypeSummary(Map<String, Integer> byType) {
+        ArrayList<String> summary = new ArrayList<>();
+        addTypeSummary(summary, byType, "face");
+        addTypeSummary(summary, byType, "body");
+        addTypeSummary(summary, byType, "measure");
+
+        StringBuilder summaryText = new StringBuilder();
+        for (int i = 0; i < summary.size(); i++) {
+            if (i > 0) {
+                summaryText.append(", ");
+            }
+            summaryText.append(summary.get(i));
+        }
+        return summaryText.toString();
+    }
+
+    private void addTypeSummary(List<String> summary, Map<String, Integer> byType, String type) {
+        Integer count = byType.get(type);
+        if (count != null) {
+            summary.add(RatingUtils.getRatingTypeLabel(type) + " - " + count);
+        }
     }
 
     private void mainMenu(Long chatId) {

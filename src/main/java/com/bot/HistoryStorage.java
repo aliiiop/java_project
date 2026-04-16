@@ -20,7 +20,7 @@ public class HistoryStorage {
         if (!f.exists()) return new HashMap<>();
         try (Reader r = new FileReader(f)) {
             Map<Long, List<UserSession.RatingHistoryEntry>> data = GSON.fromJson(r, TYPE);
-            return data == null ? new HashMap<>() : data;
+            return normalizeHistory(data);
         } catch (Exception e) {
             System.err.println("Не удалось загрузить историю: " + e.getMessage());
             return new HashMap<>();
@@ -35,5 +35,22 @@ public class HistoryStorage {
         } catch (Exception e) {
             System.err.println("Не удалось сохранить историю: " + e.getMessage());
         }
+    }
+    private static Map<Long, List<UserSession.RatingHistoryEntry>> normalizeHistory(
+        Map<Long, List<UserSession.RatingHistoryEntry>> data
+    ) {
+        HashMap<Long, List<UserSession.RatingHistoryEntry>> normalized = new HashMap<>();
+        if (data == null) {
+            return normalized;
+        }
+
+        for (Map.Entry<Long, List<UserSession.RatingHistoryEntry>> entry : data.entrySet()) {
+            ArrayList<UserSession.RatingHistoryEntry> historyEntries = new ArrayList<>();
+            if (entry.getValue() != null) {
+                historyEntries.addAll(entry.getValue());
+            }
+            normalized.put(entry.getKey(), historyEntries);
+        }
+        return normalized;
     }
 }
