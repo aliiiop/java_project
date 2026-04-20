@@ -50,11 +50,20 @@ public class RatingBot extends TelegramLongPollingBot {
                 } else if (text.equals("💎 Премиум")) {
                     premium(chatId, session);
                     return;
+                } else if (text.equals("💳 Купить Премиум")) {
+                    showPaymentDetails(chatId, session);
+                    return;
                 } else if (text.equals("❓ Помощь")) {
                     help(chatId);
                     return;
                 }
                 
+                // Если ждём чек — просим отправить фото
+                if (session.getState() == UserState.WAITING_FOR_RECEIPT) {
+                    sendText(chatId, "📸 Отправьте *фото или скриншот* чека об оплате.\n\nЕсли хотите вернуться — нажмите «🔄 Новая оценка».");
+                    return;
+                }
+
                 // Если ждем замеры
                 if (session.getState() == UserState.WAITING_FOR_MEASUREMENTS) {
                     handleMeasurements(chatId, text, session);
@@ -76,9 +85,15 @@ public class RatingBot extends TelegramLongPollingBot {
                 sendText(chatId, "❌ Используйте кнопки меню");
                 mainMenu(chatId);
             }
-            // Обработка фото
-            else if (msg.hasPhoto() && session.getState() == UserState.WAITING_FOR_PHOTO) {
-                handlePhoto(chatId, msg, session);
+            // Обработка фото — чек или обычная оценка
+            else if (msg.hasPhoto()) {
+                if (session.getState() == UserState.WAITING_FOR_RECEIPT) {
+                    verifyReceipt(chatId, msg, session);
+                } else if (session.getState() == UserState.WAITING_FOR_PHOTO) {
+                    handlePhoto(chatId, msg, session);
+                } else {
+                    sendText(chatId, "❌ Сначала выберите тип оценки через меню.");
+                }
             }
             else {
                 sendText(chatId, "❌ Отправьте фото или используйте кнопки");
@@ -111,9 +126,90 @@ public class RatingBot extends TelegramLongPollingBot {
     }
     
     private void premium(Long chatId, UserSession s) {
-        s.setPremium(true);
-        sendText(chatId, "✅ Премиум активирован!\n\nТеперь вы будете получать подробный разбор каждой оценки!");
-        mainMenu(chatId);
+        if (s.isPremium()) {
+            sendText(chatId, "✅ *У вас уже активирован Премиум!* 💎");
+            mainMenu(chatId);
+            return;
+        }
+        SendMessage m = new SendMessage();
+        m.setChatId(chatId.toString());
+        m.setText(
+            "💎 *ПРЕМИУМ ПОДПИСКА*\n\n" +
+            "Разблокируй полный потенциал:\n\n" +
+            "✅ Детальный разбор каждой оценки\n" +
+            "✅ Персональные рекомендации\n" +
+            "✅ План тренировок и питания\n" +
+            "✅ Сравнение с топ-моделями мира\n\n" +
+            "💰 *Цена: 990 ₸/месяц*\n\n" +
+            "Нажми кнопку ниже чтобы оплатить:"
+        );
+        m.setParseMode("Markdown");
+        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
+        kb.setResizeKeyboard(true);
+        List<KeyboardRow> rows = new ArrayList<>();
+        KeyboardRow r1 = new KeyboardRow();
+        r1.add("💳 Купить Премиум");
+        rows.add(r1);
+        KeyboardRow r2 = new KeyboardRow();
+        r2.add("🔄 Новая оценка");
+        r2.add("❓ Помощь");
+        rows.add(r2);
+        kb.setKeyboard(rows);
+        m.setReplyMarkup(kb);
+        try { execute(m); } catch (TelegramApiException e) {}
+    }
+
+    private void showPaymentDetails(Long chatId, UserSession s) {
+        s.setState(UserState.WAITING_FOR_RECEIPT);
+        sendText(chatId,
+            "💳 *РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ*\n\n" +
+            "Переведите *990 ₸* на карту:\n\n" +
+            "🏦 Банк: *Любой казахстанский банк*\n" +
+            "💳 Номер карты:\n`4400 4303 5445 6268`\n" +
+            "👤 Получатель: *Bektemirospanov*\n" +
+            "💰 Сумма: *990 ₸*\n" +
+            "📝 Назначение: *Премиум подписка*\n\n" +
+            "━━━━━━━━━━━━━━━━━━━\n" +
+            "📸 После оплаты *отправьте фото или скриншот чека* прямо в этот чат.\n\n" +
+            "🤖 ИИ автоматически проверит чек и активирует Премиум!"
+        );
+    }
+
+    private void verifyReceipt(Long chatId, Message msg, UserSession s) {
+        sendText(chatId, "🤖 *Проверяем ваш чек через ИИ...*\n\nЭто займёт 10-15 секунд.");
+        try {
+            String photoId = msg.getPhoto().get(msg.getPhoto().size() - 1).getFileId();
+            String tempFilePath = "temp_receipt_" + chatId + ".jpg";
+
+            ReceiptAnalyzer.downloadTelegramFile(photoId, this, tempFilePath);
+            ReceiptAnalyzer.AnalysisResult result = ReceiptAnalyzer.analyzeReceipt(tempFilePath);
+            java.nio.file.Files.deleteIfExists(java.nio.file.Paths.get(tempFilePath));
+
+            if (result.isValid) {
+                s.setPremium(true);
+                s.setState(UserState.SELECTING_GENDER);
+                sendText(chatId,
+                    "✅ *ПЛАТЁЖ ПОДТВЕРЖДЁН!*\n\n" +
+                    result.detailedAnalysis + "\n\n" +
+                    "🎉 *Премиум подписка активирована!*\n\n" +
+                    "Нажмите «🔄 Новая оценка» для полного анализа 💎"
+                );
+                mainMenu(chatId);
+            } else {
+                sendText(chatId,
+                    result.message + "\n\n" +
+                    result.detailedAnalysis + "\n\n" +
+                    "Отправьте чёткий скриншот чека ещё раз."
+                );
+            }
+        } catch (Exception e) {
+            System.err.println("Ошибка при проверке чека: " + e.getMessage());
+            sendText(chatId,
+                "⚠️ *Ошибка при анализе чека*\n\n" +
+                "Попробуйте отправить чек ещё раз.\n\n" +
+                "_Убедитесь что:\n• Фото чёткое\n• Сумма 990 ₸\n• На карту 4400 4303 5445 6268_"
+            );
+        }
     }
     
     private void compare(Long chatId, UserSession s) {
