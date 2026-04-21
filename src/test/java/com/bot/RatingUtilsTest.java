@@ -143,23 +143,4 @@ class RatingUtilsTest {
             RatingUtils.compareToCelebrity(8.0, "female");
         });
     }
-
-    @Test
-    @DisplayName("Тест 16: Вердикт mogger/mogged есть только у face-оценки")
-    void testEditVerdictOnlyForFaceRating() {
-        String bodyMessage = RatingUtils.generateRatingMessage(8.0, true, "male", null, "body");
-
-        assertFalse(bodyMessage.contains("МОГГАЮТ"));
-        assertFalse(bodyMessage.contains("МОГГАЕШЬ"));
-        assertFalse(bodyMessage.contains("НЕЙТРАЛЬНО"));
-    }
-
-    @Test
-    @DisplayName("Тест 17: Эдит создается только для face и только не на neutral")
-    void testFaceEditCreationRules() {
-        assertTrue(FaceEditService.shouldCreateFaceEdit("face", 3.4));
-        assertFalse(FaceEditService.shouldCreateFaceEdit("face", 4.5));
-        assertTrue(FaceEditService.shouldCreateFaceEdit("face", 8.0));
-        assertFalse(FaceEditService.shouldCreateFaceEdit("body", 8.0));
-    }
 }

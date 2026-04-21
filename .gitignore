@@ -5,10 +5,3 @@
 /CheckOutput.java
 /SimpleBot.java
 /TestBot.java
-/media/photos/*
-!/media/photos/.gitkeep
-/media/output/*
-!/media/output/.gitkeep
-/media/edit_templates/*
-!/media/edit_templates/.gitkeep
-!/media/edit_templates/README.md
