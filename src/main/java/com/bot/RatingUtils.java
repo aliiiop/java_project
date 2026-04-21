@@ -2,6 +2,28 @@ package com.bot;
 
 import java.util.Map;
 
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
+
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
+import org.apache.http.entity.ContentType;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import org.apache.http.client.methods.HttpGet;
+
+import com.google.gson.JsonObject;
+
 public class RatingUtils {
     public static String generateRatingMessage(double rating, boolean premium, String gender) {
         return generateRatingMessage(rating, premium, gender, null, "face");
@@ -12,11 +34,55 @@ public class RatingUtils {
     }
 
     public static double evaluateFace(String photoId, String gender) {
-        if (photoId == null || photoId.isEmpty()) return 0;
-        int hash = photoId.hashCode();
-        double rating = 3.5 + (Math.abs(hash % 50) / 10.0);
-        return Math.max(1.0, Math.min(10.0, rating));
+    if (photoId == null || photoId.isEmpty()) return 5.0;
+    
+    try {
+        // Получаем URL фото
+        String photoUrl = getPhotoUrl(photoId);
+        if (photoUrl == null) return 5.0;
+        
+        // Вызываем Python-сервис
+        String pythonUrl = "http://localhost:5001/analyze";
+        String jsonBody = String.format("{\"photo_url\":\"%s\",\"gender\":\"%s\"}", photoUrl, gender);
+        
+        HttpPost post = new HttpPost(pythonUrl);
+        post.setEntity(new StringEntity(jsonBody, ContentType.APPLICATION_JSON));
+        post.setHeader("Content-Type", "application/json");
+        
+        try (CloseableHttpClient client = HttpClients.createDefault();
+             CloseableHttpResponse response = client.execute(post)) {
+            
+            String json = EntityUtils.toString(response.getEntity());
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            
+            if (obj.has("rating")) {
+                return obj.get("rating").getAsDouble();
+            }
+        }
+    } catch (Exception e) {
+        e.printStackTrace();
     }
+    
+    return 5.0; // fallback
+}
+
+    private static String getPhotoUrl(String fileId) throws Exception {
+    String token = "8762441185:AAHBI8LCr47AD6XJRx-bakOSLHfzGgTVpuk";
+    String url = "https://api.telegram.org/bot" + token + "/getFile?file_id=" + fileId;
+    
+    try (CloseableHttpClient client = HttpClients.createDefault()) {
+        HttpGet get = new HttpGet(url);
+        try (CloseableHttpResponse response = client.execute(get)) {
+            String json = EntityUtils.toString(response.getEntity());
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            if (obj.get("ok").getAsBoolean()) {
+                String filePath = obj.get("result").getAsJsonObject().get("file_path").getAsString();
+                return "https://api.telegram.org/file/bot" + token + "/" + filePath;
+            }
+        }
+    }
+    return null;
+}   
 
     public static double evaluateBodyByPhoto(String photoId, String gender) {
         if (photoId == null || photoId.isEmpty()) return 0;

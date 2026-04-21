@@ -1,5 +1,11 @@
+com/bot/UserSession$UndoAction.class
 com/bot/Main.class
+com/bot/HistoryStorage.class
 com/bot/RatingUtils.class
 com/bot/RatingBot.class
 com/bot/UserState.class
+com/bot/SessionStorage.class
+com/bot/SessionStorage$1.class
+com/bot/HistoryStorage$1.class
+com/bot/UserSession$RatingHistoryEntry.class
 com/bot/UserSession.class
