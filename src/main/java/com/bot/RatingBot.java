@@ -1,15 +1,192 @@
 package com.bot;
 
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.send.SendVideo;
+import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+
+public class RatingBot extends TelegramLongPollingBot {
+    private static final String UNDO_BUTTON = "↩️ Отменить шаг";
+
+    private final String BOT_TOKEN = "8762441185:AAHBI8LCr47AD6XJRx-bakOSLHfzGgTVpuk";
+    private final String BOT_USERNAME = "Kara_Tabletka_Bot";
+    private final Map<Long, UserSession> users = new HashMap<>();
+
+    public RatingBot() {
+        FaceEditService.ensureMediaDirectories();
+        users.putAll(SessionStorage.loadAll());
+        System.out.println("📜 Загружены сессии для " + users.size() + " пользователей");
+    }
+
+    private void persistSessions() {
+        Map<Long, UserSession> data = new HashMap<>();
+        }
+    }
+
+    private void handlePhoto(Long chatId, Message msg, UserSession s) {
+        try {
+            String photoId = msg.getPhoto().get(msg.getPhoto().size() - 1).getFileId();
+            String ratingType = s.getRatingType();
+            String gender = s.getGender();
+            sendText(chatId, "📸 Фото получено! Идет анализ...");
+
+            double rating;
+            if ("face".equals(ratingType)) {
+                rating = RatingUtils.evaluateFace(photoId, gender);
+            } else {
+                rating = RatingUtils.evaluateBodyByPhoto(photoId, gender);
+            }
+
+            Double previousRating = s.getPreviousRating(ratingType);
+            s.setLastRating(rating);
+            s.addHistoryEntry(ratingType, gender, rating);
+            persistSessions();
+            String result = RatingUtils.generateRatingMessage(
+                rating, s.isPremium(), gender, previousRating, ratingType
+            );
+            s.clearUndoActions();
+            s.setState(UserState.SELECTING_GENDER);
+            sendText(chatId, result);
+            maybeSendFaceEdit(chatId, photoId, gender, ratingType, rating);
+            mainMenu(chatId);
+        } catch (Exception e) {
+            sendText(chatId, "❌ Ошибка при обработке фото. Попробуйте еще раз.");
+            e.printStackTrace();
+        }
+    }
+
+    private void showHistory(Long chatId, UserSession s) {
+        List<UserSession.RatingHistoryEntry> history = s.getHistory();
+        if (history.isEmpty()) {
+            sendText(chatId, "📜 *История пуста*\n\nУ вас пока нет ни одной оценки.\nНажмите «🔄 Новая оценка», чтобы начать!");
+            mainMenu(chatId);
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder("📜 *История ваших оценок*\n");
+        sb.append("Всего: ").append(history.size()).append("\n\n");
+
+        if (s.isPremium()) {
+            double best = 0.0;
+            double sum = 0.0;
+            Map<String, Integer> byType = countHistoryByType(history);
+            for (UserSession.RatingHistoryEntry entry : history) {
+                sum += entry.getRating();
+                best = Math.max(best, entry.getRating());
+            }
+            double average = sum / history.size();
+            String typeSummary = buildTypeSummary(byType);
+            sb.append("💎 *Премиум-статистика*\n");
+            sb.append("Средний балл: ").append(String.format("%.2f", average)).append("\n");
+            sb.append("Лучший балл: ").append(String.format("%.1f", best)).append("\n");
+            sb.append("По типам: ");
+            sb.append(typeSummary);
+            sb.append("\n\n");
+
+            int idx = 1;
+            for (UserSession.RatingHistoryEntry entry : history) {
+                sb.append(entry.format(idx++)).append("\n\n");
+            }
+
+            sendText(chatId, sb.toString());
+            mainMenu(chatId);
+            return;
+        }
+
+        List<UserSession.RatingHistoryEntry> recentHistory = getRecentHistory(history, 10);
+        int idx = history.size() - recentHistory.size() + 1;
+        for (UserSession.RatingHistoryEntry entry : recentHistory) {
+            sb.append(entry.format(idx++)).append("\n\n");
+        }
+
+        if (history.size() > recentHistory.size()) {
+            sb.append("_(показаны последние 10 из ").append(history.size()).append(")_");
+        }
+
+        sendText(chatId, sb.toString());
+        mainMenu(chatId);
+    }
+
+    private void sendText(Long chatId, String text, ReplyKeyboardMarkup keyboard) {
+        SendMessage m = new SendMessage();
+        m.setChatId(chatId.toString());
+        m.setText(text);
+        m.setParseMode("Markdown");
+        if (keyboard != null) {
+            m.setReplyMarkup(keyboard);
+        }
+        try { execute(m); } catch (TelegramApiException e) {
+            System.err.println("Ошибка отправки: " + e.getMessage());
+        }
+    }
+
+    private void maybeSendFaceEdit(
+        Long chatId,
+        String photoId,
+        String gender,
+        String ratingType,
+        double rating
+    ) {
+        if (!FaceEditService.shouldCreateFaceEdit(ratingType, rating)) {
+            return;
+        }
+
+        FaceEditService.RenderResult renderResult = buildFaceEdit(chatId, photoId, gender, rating);
+        if (renderResult.isReady()) {
+            sendRenderedEdit(chatId, renderResult.getOutput());
+            return;
+        }
+
+        if (renderResult.getMessage() != null) {
+            System.out.println("Face edit skipped for chat " + chatId + ": " + renderResult.getMessage());
+        }
+    }
+
+    private FaceEditService.RenderResult buildFaceEdit(
+        Long chatId,
+        String photoId,
+        String gender,
+        double rating
+    ) {
+        try {
+            GetFile getFileMethod = new GetFile();
+            getFileMethod.setFileId(photoId);
+
+            org.telegram.telegrambots.meta.api.objects.File tgFile = execute(getFileMethod);
+            Path facePhoto = FaceEditService.buildPhotoPath(chatId, tgFile.getFilePath());
+            downloadFile(tgFile.getFilePath(), facePhoto.toFile());
+            return FaceEditService.renderFaceEdit(chatId, gender, rating, facePhoto);
+        } catch (Exception e) {
+            return FaceEditService.RenderResult.failed("Не удалось подготовить face edit: " + e.getMessage());
+        }
+    }
+
+    private void sendRenderedEdit(Long chatId, Path videoPath) {
+        SendVideo video = new SendVideo();
+        video.setChatId(chatId.toString());
+        video.setVideo(new InputFile(videoPath.toFile()));
+        video.setCaption("🎬 Эдит готов");
+        video.setSupportsStreaming(true);
+        try {
+            execute(video);
+        } catch (TelegramApiException e) {
+            System.err.println("Не удалось отправить эдит: " + e.getMessage());
+        }
+    }
+}
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -612,6 +789,10 @@ public class RatingBot extends TelegramLongPollingBot {
         sendText(chatId, text, null);
     }
 
+    private void sendText(Long chatId, String text) {
+        sendText(chatId, text, null);
+    }
+
     private void sendText(Long chatId, String text, ReplyKeyboardMarkup keyboard) {
         SendMessage m = new SendMessage();
         m.setChatId(chatId.toString());
@@ -622,6 +803,60 @@ public class RatingBot extends TelegramLongPollingBot {
         }
         try { execute(m); } catch (TelegramApiException e) {
             System.err.println("Ошибка отправки: " + e.getMessage());
+        }
+    }
+
+    private void maybeSendFaceEdit(
+        Long chatId,
+        String photoId,
+        String gender,
+        String ratingType,
+        double rating
+    ) {
+        if (!FaceEditService.shouldCreateFaceEdit(ratingType, rating)) {
+            return;
+        }
+
+        FaceEditService.RenderResult renderResult = buildFaceEdit(chatId, photoId, gender, rating);
+        if (renderResult.isReady()) {
+            sendRenderedEdit(chatId, renderResult.getOutput());
+            return;
+        }
+
+        if (renderResult.getMessage() != null) {
+            System.out.println("Face edit skipped for chat " + chatId + ": " + renderResult.getMessage());
+        }
+    }
+
+    private FaceEditService.RenderResult buildFaceEdit(
+        Long chatId,
+        String photoId,
+        String gender,
+        double rating
+    ) {
+        try {
+            GetFile getFileMethod = new GetFile();
+            getFileMethod.setFileId(photoId);
+
+            org.telegram.telegrambots.meta.api.objects.File tgFile = execute(getFileMethod);
+            Path facePhoto = FaceEditService.buildPhotoPath(chatId, tgFile.getFilePath());
+            downloadFile(tgFile.getFilePath(), facePhoto.toFile());
+            return FaceEditService.renderFaceEdit(chatId, gender, rating, facePhoto);
+        } catch (Exception e) {
+            return FaceEditService.RenderResult.failed("Не удалось подготовить face edit: " + e.getMessage());
+        }
+    }
+
+    private void sendRenderedEdit(Long chatId, Path videoPath) {
+        SendVideo video = new SendVideo();
+        video.setChatId(chatId.toString());
+        video.setVideo(new InputFile(videoPath.toFile()));
+        video.setCaption("🎬 Эдит готов");
+        video.setSupportsStreaming(true);
+        try {
+            execute(video);
+        } catch (TelegramApiException e) {
+            System.err.println("Не удалось отправить эдит: " + e.getMessage());
         }
     }
 }
