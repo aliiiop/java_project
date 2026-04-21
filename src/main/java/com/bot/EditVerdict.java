@@ -26,12 +26,12 @@ public enum EditVerdict {
     }
 
     public static EditVerdict fromFaceRating(double rating) {
-        if (rating < 3.5) {
+        if (rating < 4.0) {
             return MOGGED;
         }
-        if (rating <= 5.5) {
-            return NEUTRAL;
+        if (rating > 7.5) {
+            return MOGGER;
         }
-        return MOGGER;
+        return NEUTRAL;
     }
 }

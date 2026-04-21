@@ -244,8 +244,6 @@ public class FaceEditService {
             command.add(filter);
             command.add("-map");
             command.add("[v]");
-            command.add("-map");
-            command.add("1:a?");
             command.add("-c:v");
             command.add(encoder);
             if ("libx264".equals(encoder)) {
@@ -257,8 +255,7 @@ public class FaceEditService {
             }
             command.add("-pix_fmt");
             command.add("yuv420p");
-            command.add("-c:a");
-            command.add("aac");
+            command.add("-an");
             command.add("-movflags");
             command.add("+faststart");
             command.add("-t");
