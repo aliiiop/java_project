@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 C:\Users\пк\Documents\GitHub\java_project\src\main\java\com\bot\HistoryStorage.java
 C:\Users\пк\Documents\GitHub\java_project\src\main\java\com\bot\Main.java
 C:\Users\пк\Documents\GitHub\java_project\src\main\java\com\bot\RatingUtils.java
@@ -8,3 +9,16 @@ C:\Users\пк\Documents\GitHub\java_project\src\main\java\com\bot\UserState.java
 C:\Users\пк\Documents\GitHub\java_project\src\main\java\com\bot\RatingBot.java
 C:\Users\пк\Documents\GitHub\java_project\src\main\java\com\bot\ReceiptAnalyzer.java
 C:\Users\пк\Documents\GitHub\java_project\src\main\java\com\bot\UserSession.java
+=======
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/FaceAnalyzer.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/FaceEditService.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/RatingBot.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/Main.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/SessionStorage.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/ReceiptAnalyzer.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/UserState.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/FacePlusPlusAnalyzer.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/HistoryStorage.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/RatingUtils.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/UserSession.java
+>>>>>>> main

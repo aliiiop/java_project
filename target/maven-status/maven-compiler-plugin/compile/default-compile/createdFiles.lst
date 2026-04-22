@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 com\bot\RatingBot.class
 com\bot\SessionStorage.class
 com\bot\UserSession.class
@@ -9,3 +10,24 @@ com\bot\RatingUtils.class
 com\bot\SessionStorage$1.class
 com\bot\HistoryStorage$1.class
 com\bot\UserSession$RatingHistoryEntry.class
+=======
+com/bot/ReceiptAnalyzer.class
+com/bot/Main.class
+com/bot/RatingUtils.class
+com/bot/ReceiptAnalyzer$AnalysisResult.class
+com/bot/RatingBot.class
+com/bot/FaceAnalyzer$FaceAnalysisResult.class
+com/bot/FacePlusPlusAnalyzer$FaceAnalysisResult.class
+com/bot/SessionStorage.class
+com/bot/SessionStorage$1.class
+com/bot/HistoryStorage$1.class
+com/bot/UserSession.class
+com/bot/UserSession$UndoAction.class
+com/bot/FacePlusPlusAnalyzer.class
+com/bot/HistoryStorage.class
+com/bot/UserState.class
+com/bot/FaceAnalyzer.class
+com/bot/FaceEditService.class
+com/bot/UserSession$RatingHistoryEntry.class
+com/bot/FaceEditService$RenderResult.class
+>>>>>>> main

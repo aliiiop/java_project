@@ -2,7 +2,21 @@ package com.bot;
 
 import java.util.Map;
 
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
+import org.apache.http.entity.ContentType;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 public class RatingUtils {
+
+    private static final String BOT_TOKEN = "8762441185:AAHBI8LCr47AD6XJRx-bakOSLHfzGgTVpuk";
+
     public static String generateRatingMessage(double rating, boolean premium, String gender) {
         return generateRatingMessage(rating, premium, gender, null, "face");
     }
@@ -12,10 +26,47 @@ public class RatingUtils {
     }
 
     public static double evaluateFace(String photoId, String gender) {
-        if (photoId == null || photoId.isEmpty()) return 0;
-        int hash = photoId.hashCode();
-        double rating = 3.5 + (Math.abs(hash % 50) / 10.0);
-        return Math.max(1.0, Math.min(10.0, rating));
+    if (photoId == null || photoId.isEmpty()) return 5.0;
+    
+    try {
+        String photoUrl = getPhotoUrl(photoId);
+        if (photoUrl == null) return 5.0;
+        
+        // Получаем полный результат
+        FacePlusPlusAnalyzer.FaceAnalysisResult result = FacePlusPlusAnalyzer.analyzeFaceFull(photoUrl);
+        
+        // Сохраняем анализ в отдельное место (например, в статическую переменную или кэш)
+        lastFaceAnalysis = result.analysisText;
+        
+        return result.rating;
+    } catch (Exception e) {
+        e.printStackTrace();
+        return 5.0;
+    }
+}
+
+// Добавь переменную для хранения последнего анализа
+private static String lastFaceAnalysis = "";
+
+public static String getLastFaceAnalysis() {
+    return lastFaceAnalysis;
+}
+
+    private static String getPhotoUrl(String fileId) throws Exception {
+        String url = "https://api.telegram.org/bot" + BOT_TOKEN + "/getFile?file_id=" + fileId;
+        
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
+            HttpGet get = new HttpGet(url);
+            try (CloseableHttpResponse response = client.execute(get)) {
+                String json = EntityUtils.toString(response.getEntity());
+                JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+                if (obj.get("ok").getAsBoolean()) {
+                    String filePath = obj.get("result").getAsJsonObject().get("file_path").getAsString();
+                    return "https://api.telegram.org/file/bot" + BOT_TOKEN + "/" + filePath;
+                }
+            }
+        }
+        return null;
     }
 
     public static double evaluateBodyByPhoto(String photoId, String gender) {
@@ -151,9 +202,7 @@ public class RatingUtils {
         msg.append("🌟 *Ваша оценка: ").append(String.format("%.1f", rating)).append(" PSL* 🌟\n\n");
         appendProgressLine(msg, rating, previousRating);
         msg.append("📈 *Потенциал:* ").append(getPotentialLabel(rating)).append("\n");
-        if ("face".equals(ratingType)) {
-            msg.append("🎭 *Вердикт:* ").append(getEditLabel(rating)).append("\n");
-        }
+        msg.append("🎭 *Вердикт:* ").append(getEditLabel(rating)).append("\n");
         msg.append("🧭 *Уровень:* ").append(getLevelLabel(rating)).append("\n");
 
         if (!premium) {
@@ -167,6 +216,16 @@ public class RatingUtils {
 
         msg.append("\n🔍 *Детальный разбор:*\n");
         msg.append(buildPhotoBreakdown(rating, gender, ratingType));
+        
+        // 🔥 ДОБАВЛЯЕМ АНАЛИЗ ЛИЦА ОТ Face++ ДЛЯ ПРЕМИУМ 🔥
+        if ("face".equals(ratingType)) {
+            String faceAnalysis = FacePlusPlusAnalyzer.getPremiumAnalysis();
+            if (faceAnalysis != null && !faceAnalysis.isEmpty()) {
+                msg.append("\n🔬 *Анализ твоего лица:*\n");
+                msg.append(faceAnalysis);
+            }
+        }
+        
         msg.append("\n🎯 *Главный фокус:* ").append(getPrimaryFocus(rating, ratingType)).append("\n");
         msg.append("📌 *Потолок при нормальном апгрейде:* ").append(getPotentialCeiling(rating)).append("\n");
         msg.append("📝 Это не компьютерное зрение по чертам лица, а расширенная интерпретация итогового балла.\n");
@@ -309,7 +368,9 @@ public class RatingUtils {
     }
 
     private static String getEditLabel(double rating) {
-        return EditVerdict.fromFaceRating(rating).getLabel();
+        if (rating < 3.5) return "ТЕБЯ МОГГАЮТ";
+        if (rating <= 5.5) return "НЕЙТРАЛЬНО";
+        return "ТЫ МОГГАЕШЬ";
     }
 
     private static String buildPhotoBreakdown(double rating, String gender, String ratingType) {
