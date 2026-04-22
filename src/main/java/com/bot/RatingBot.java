@@ -410,6 +410,12 @@ public class RatingBot extends TelegramLongPollingBot {
                 rating = RatingUtils.evaluateBodyByPhoto(photoId, gender);
             }
 
+            if (rating < 0) {
+                sendText(chatId, "😶 На фото не обнаружено лицо.\n\nПожалуйста, скиньте фотографию, где чётко видно лицо анфас — без маски, солнечных очков или сильного наклона головы.");
+                mainMenu(chatId);
+                return;
+            }
+
             Double previousRating = session.getPreviousRating(ratingType);
             session.setLastRating(rating);
             session.addHistoryEntry(ratingType, gender, rating);

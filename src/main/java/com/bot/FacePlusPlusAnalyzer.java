@@ -34,20 +34,27 @@ public class FacePlusPlusAnalyzer {
     
     public static FaceAnalysisResult analyzeFaceFull(String photoUrl) {
         FaceAnalysisResult result = new FaceAnalysisResult();
-        
+
         try {
             byte[] imageBytes = downloadImage(photoUrl);
             JsonObject response = callFacePlusPlus(imageBytes);
-            
+
             result.rating = getRawBeautyScore(response);
-            result.analysisText = parseAnalysis(response);
+
+            if (result.rating < 0) {
+                result.faceDetected = false;
+                result.analysisText = "😶 На фото не обнаружено лицо.\n\nПожалуйста, скиньте фотографию, где чётко видно лицо анфас (без маски, солнечных очков или сильного наклона).";
+            } else {
+                result.analysisText = parseAnalysis(response);
+            }
+
             lastAnalysis = result.analysisText;
-            
             return result;
         } catch (Exception e) {
             System.err.println("❌ Ошибка Face++: " + e.getMessage());
-            result.rating = 5.0;
-            result.analysisText = "❌ Не удалось проанализировать лицо. Попробуй другое фото.";
+            result.faceDetected = false;
+            result.rating = -1.0;
+            result.analysisText = "❌ Не удалось проанализировать фото. Попробуй другое изображение.";
             lastAnalysis = result.analysisText;
             return result;
         }
@@ -71,15 +78,14 @@ public class FacePlusPlusAnalyzer {
         }
     }
     
-    // Просто возвращаем сырую оценку красоты от Face++ (0-100), переводим в 1-10
     private static double getRawBeautyScore(JsonObject response) {
         if (response.has("error_message") || !response.has("faces") || response.getAsJsonArray("faces").isEmpty()) {
-            return 5.0;
+            return -1.0;
         }
-        
+
         JsonObject face = response.getAsJsonArray("faces").get(0).getAsJsonObject();
         JsonObject attributes = face.getAsJsonObject("attributes");
-        
+
         if (attributes.has("beauty")) {
             JsonObject beauty = attributes.getAsJsonObject("beauty");
             double score;
@@ -88,11 +94,9 @@ public class FacePlusPlusAnalyzer {
             } else {
                 score = beauty.get("male_score").getAsDouble();
             }
-            // Переводим 0-100 в 1-10
             return Math.max(1.0, Math.min(10.0, score / 10.0));
         }
-        
-        return 5.0;
+        return -1.0;
     }
     
     private static String parseAnalysis(JsonObject response) {
@@ -148,5 +152,6 @@ public class FacePlusPlusAnalyzer {
     public static class FaceAnalysisResult {
         public double rating;
         public String analysisText;
+        public boolean faceDetected = true;
     }
 }
