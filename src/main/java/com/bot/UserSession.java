@@ -16,6 +16,9 @@ public class UserSession {
     private boolean isPremium;
     private String premiumUntil;
     private double lastRating;
+    private String lastRatingGender;
+    private String lastRatingType;
+    private String lastPhotoFileId;
     private Map<String, Double> bodyMeasurements = new HashMap<>();
     private List<RatingHistoryEntry> history = new ArrayList<>();
     private LinkedList<UndoAction> undoActions = new LinkedList<>();
@@ -60,6 +63,12 @@ public class UserSession {
     }
     public double getLastRating() { return lastRating; }
     public void setLastRating(double lastRating) { this.lastRating = lastRating; }
+    public String getLastRatingGender() { return lastRatingGender; }
+    public void setLastRatingGender(String lastRatingGender) { this.lastRatingGender = lastRatingGender; }
+    public String getLastRatingType() { return lastRatingType; }
+    public void setLastRatingType(String lastRatingType) { this.lastRatingType = lastRatingType; }
+    public String getLastPhotoFileId() { return lastPhotoFileId; }
+    public void setLastPhotoFileId(String lastPhotoFileId) { this.lastPhotoFileId = lastPhotoFileId; }
     public Map<String, Double> getBodyMeasurements() { return bodyMeasurements; }
     public void pushUndoAction(UserState previousState, String previousGender, String previousRatingType, String measurementKeyToRemove) {
         undoActions.addLast(new UndoAction(previousState, previousGender, previousRatingType, measurementKeyToRemove));
