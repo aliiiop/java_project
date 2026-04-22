@@ -9,22 +9,14 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
-
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
 import org.apache.http.entity.ContentType;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import org.apache.http.client.methods.HttpGet;
-
-import com.google.gson.JsonObject;
-
 public class RatingUtils {
+
+    private static final String BOT_TOKEN = "8762441185:AAHBI8LCr47AD6XJRx-bakOSLHfzGgTVpuk";
+
     public static String generateRatingMessage(double rating, boolean premium, String gender) {
         return generateRatingMessage(rating, premium, gender, null, "face");
     }
@@ -40,38 +32,42 @@ public class RatingUtils {
         String photoUrl = getPhotoUrl(photoId);
         if (photoUrl == null) return 5.0;
         
-        // Вызываем Face++ API вместо Python
-        double rating = FacePlusPlusAnalyzer.analyzeFace(photoUrl);
+        // Получаем полный результат
+        FacePlusPlusAnalyzer.FaceAnalysisResult result = FacePlusPlusAnalyzer.analyzeFaceFull(photoUrl);
         
-        // Штраф за несовпадение пола (если нужно)
-        // Face++ сам определяет пол, можем сравнить
+        // Сохраняем анализ в отдельное место (например, в статическую переменную или кэш)
+        lastFaceAnalysis = result.analysisText;
         
-        return rating;
-        
+        return result.rating;
     } catch (Exception e) {
         e.printStackTrace();
         return 5.0;
     }
 }
 
-private static String getPhotoUrl(String fileId) throws Exception {
-    String token = "8762441185:AAHBI8LCr47AD6XJRx-bakOSLHfzGgTVpuk";
-    String url = "https://api.telegram.org/bot" + token + "/getFile?file_id=" + fileId;
-    
-    try (CloseableHttpClient client = HttpClients.createDefault()) {
-        HttpGet get = new HttpGet(url);
-        try (CloseableHttpResponse response = client.execute(get)) {
-            String json = EntityUtils.toString(response.getEntity());
-            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-            if (obj.get("ok").getAsBoolean()) {
-                String filePath = obj.get("result").getAsJsonObject().get("file_path").getAsString();
-                return "https://api.telegram.org/file/bot" + token + "/" + filePath;
-            }
-        }
-    }
-    return null;
+// Добавь переменную для хранения последнего анализа
+private static String lastFaceAnalysis = "";
+
+public static String getLastFaceAnalysis() {
+    return lastFaceAnalysis;
 }
 
+    private static String getPhotoUrl(String fileId) throws Exception {
+        String url = "https://api.telegram.org/bot" + BOT_TOKEN + "/getFile?file_id=" + fileId;
+        
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
+            HttpGet get = new HttpGet(url);
+            try (CloseableHttpResponse response = client.execute(get)) {
+                String json = EntityUtils.toString(response.getEntity());
+                JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+                if (obj.get("ok").getAsBoolean()) {
+                    String filePath = obj.get("result").getAsJsonObject().get("file_path").getAsString();
+                    return "https://api.telegram.org/file/bot" + BOT_TOKEN + "/" + filePath;
+                }
+            }
+        }
+        return null;
+    }
 
     public static double evaluateBodyByPhoto(String photoId, String gender) {
         if (photoId == null || photoId.isEmpty()) return 0;
@@ -220,6 +216,16 @@ private static String getPhotoUrl(String fileId) throws Exception {
 
         msg.append("\n🔍 *Детальный разбор:*\n");
         msg.append(buildPhotoBreakdown(rating, gender, ratingType));
+        
+        // 🔥 ДОБАВЛЯЕМ АНАЛИЗ ЛИЦА ОТ Face++ ДЛЯ ПРЕМИУМ 🔥
+        if ("face".equals(ratingType)) {
+            String faceAnalysis = FacePlusPlusAnalyzer.getPremiumAnalysis();
+            if (faceAnalysis != null && !faceAnalysis.isEmpty()) {
+                msg.append("\n🔬 *Анализ твоего лица:*\n");
+                msg.append(faceAnalysis);
+            }
+        }
+        
         msg.append("\n🎯 *Главный фокус:* ").append(getPrimaryFocus(rating, ratingType)).append("\n");
         msg.append("📌 *Потолок при нормальном апгрейде:* ").append(getPotentialCeiling(rating)).append("\n");
         msg.append("📝 Это не компьютерное зрение по чертам лица, а расширенная интерпретация итогового балла.\n");
