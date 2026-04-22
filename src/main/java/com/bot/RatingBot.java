@@ -1,13 +1,17 @@
 package com.bot;
 
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.send.SendVideo;
+import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -22,27 +26,38 @@ public class RatingBot extends TelegramLongPollingBot {
     private final Map<Long, UserSession> users = new HashMap<>();
 
     public RatingBot() {
+        FaceEditService.ensureMediaDirectories();
         users.putAll(SessionStorage.loadAll());
         System.out.println("📜 Загружены сессии для " + users.size() + " пользователей");
     }
 
     private void persistSessions() {
         Map<Long, UserSession> data = new HashMap<>();
-        for (Map.Entry<Long, UserSession> e : users.entrySet()) {
-            if (e.getValue().hasPersistentData()) {
-                data.put(e.getKey(), e.getValue());
+        for (Map.Entry<Long, UserSession> entry : users.entrySet()) {
+            if (entry.getValue().hasPersistentData()) {
+                data.put(entry.getKey(), entry.getValue());
             }
         }
         SessionStorage.saveAll(data);
     }
 
-    @Override public String getBotUsername() { return BOT_USERNAME; }
-    @Override public String getBotToken() { return BOT_TOKEN; }
+    @Override
+    public String getBotUsername() {
+        return BOT_USERNAME;
+    }
+
+    @Override
+    public String getBotToken() {
+        return BOT_TOKEN;
+    }
 
     @Override
     public void onUpdateReceived(Update update) {
         try {
-            if (!update.hasMessage()) return;
+            if (!update.hasMessage()) {
+                return;
+            }
+
             Message msg = update.getMessage();
             Long chatId = msg.getChatId();
 
@@ -81,11 +96,11 @@ public class RatingBot extends TelegramLongPollingBot {
                     return;
                 }
 
-                if (session.getState() == UserState.WAITING_FOR_HEIGHT ||
-                    session.getState() == UserState.WAITING_FOR_WEIGHT ||
-                    session.getState() == UserState.WAITING_FOR_CHEST ||
-                    session.getState() == UserState.WAITING_FOR_WAIST ||
-                    session.getState() == UserState.WAITING_FOR_HIPS) {
+                if (session.getState() == UserState.WAITING_FOR_HEIGHT
+                    || session.getState() == UserState.WAITING_FOR_WEIGHT
+                    || session.getState() == UserState.WAITING_FOR_CHEST
+                    || session.getState() == UserState.WAITING_FOR_WAIST
+                    || session.getState() == UserState.WAITING_FOR_HIPS) {
                     handleMeasurementStep(chatId, text, session);
                     return;
                 }
@@ -102,7 +117,10 @@ public class RatingBot extends TelegramLongPollingBot {
 
                 sendText(chatId, "❌ Используйте кнопки меню");
                 mainMenu(chatId);
-            } else if (msg.hasPhoto() && session.getState() == UserState.WAITING_FOR_PHOTO) {
+                return;
+            }
+
+            if (msg.hasPhoto() && session.getState() == UserState.WAITING_FOR_PHOTO) {
                 handlePhoto(chatId, msg, session);
             } else {
                 sendText(chatId, "❌ Отправьте фото или используйте кнопки");
@@ -113,38 +131,49 @@ public class RatingBot extends TelegramLongPollingBot {
         }
     }
 
-    private void start(Long chatId, UserSession s) {
-        s.clearUndoActions();
-        s.getBodyMeasurements().clear();
-        s.setRatingType(null);
-        s.setState(UserState.SELECTING_GENDER);
+    private void start(Long chatId, UserSession session) {
+        session.clearUndoActions();
+        session.getBodyMeasurements().clear();
+        session.setRatingType(null);
+        session.setState(UserState.SELECTING_GENDER);
         showGenderMenu(chatId);
     }
 
-    private void premium(Long chatId, UserSession s) {
-        if (!s.isPremium()) {
-            s.activatePremiumDays(30);
+    private void premium(Long chatId, UserSession session) {
+        if (!session.isPremium()) {
+            session.activatePremiumDays(30);
             persistSessions();
-            sendText(chatId, "✅ Премиум активирован на 30 дней!\n\nТеперь вам доступны:\n• подробный разбор по каждой оценке\n• рекомендации, как поднять балл\n• сравнение с прошлым результатом\n• расширенная история и статистика");
+            sendText(
+                chatId,
+                "✅ Премиум активирован на 30 дней!\n\nТеперь вам доступны:\n"
+                    + "• подробный разбор по каждой оценке\n"
+                    + "• рекомендации, как поднять балл\n"
+                    + "• сравнение с прошлым результатом\n"
+                    + "• расширенная история и статистика"
+            );
         } else {
-            String until = s.getPremiumUntilLabel();
+            String until = session.getPremiumUntilLabel();
             String suffix = until == null ? "" : "\nАктивен до: " + until;
-            sendText(chatId, "💎 Премиум уже активен." + suffix + "\n\nВам доступны подробный разбор, советы по улучшению и полная история.");
+            sendText(
+                chatId,
+                "💎 Премиум уже активен." + suffix
+                    + "\n\nВам доступны подробный разбор, советы по улучшению и полная история."
+            );
         }
         mainMenu(chatId);
     }
 
-    private void compare(Long chatId, UserSession s) {
-        if (s.getLastRating() == 0) {
+    private void compare(Long chatId, UserSession session) {
+        if (session.getLastRating() == 0) {
             sendText(chatId, "❌ Сначала получите оценку внешности!\nИспользуйте /start");
         } else {
-            sendText(chatId, RatingUtils.compareToCelebrity(s.getLastRating(), s.getGender()));
+            sendText(chatId, RatingUtils.compareToCelebrity(session.getLastRating(), session.getGender()));
         }
         mainMenu(chatId);
     }
 
-    private void help(Long chatId, UserSession s) {
-        String premiumInfo = s.isPremium()
+    private void help(Long chatId, UserSession session) {
+        String premiumInfo = session.isPremium()
             ? "\n\n💎 У вас активен premium: подробный разбор, советы и полная история."
             : "\n\n💎 Premium открывает детальный разбор, советы по улучшению и статистику по истории.";
 
@@ -175,28 +204,28 @@ public class RatingBot extends TelegramLongPollingBot {
         helpSections.add(commandsText.toString().trim());
 
         helpSections.add(
-            "*Кнопки в меню:*\n" +
-            "🔄 Новая оценка - начать новую проверку с нуля\n" +
-            "⭐ Сравнить со звездой - доступно после получения последней оценки\n" +
-            "📜 История - открыть список ваших прошлых результатов\n" +
-            "❓ Помощь - заново показать эту справку\n" +
-            UNDO_BUTTON + " - откатить предыдущий шаг"
+            "*Кнопки в меню:*\n"
+                + "🔄 Новая оценка - начать новую проверку с нуля\n"
+                + "⭐ Сравнить со звездой - доступно после получения последней оценки\n"
+                + "📜 История - открыть список ваших прошлых результатов\n"
+                + "❓ Помощь - заново показать эту справку\n"
+                + UNDO_BUTTON + " - откатить предыдущий шаг"
         );
 
         helpSections.add(
-            "*Как проходит оценка:*\n" +
-            "1. Выберите пол\n" +
-            "2. Выберите тип оценки: лицо по фото, тело по фото или тело по замерам\n" +
-            "3. Отправьте фото либо по очереди введите все нужные замеры\n" +
-            "4. Получите итоговый балл и при желании откройте историю или сравнение"
+            "*Как проходит оценка:*\n"
+                + "1. Выберите пол\n"
+                + "2. Выберите тип оценки: лицо по фото, тело по фото или тело по замерам\n"
+                + "3. Отправьте фото либо по очереди введите все нужные замеры\n"
+                + "4. Получите итоговый балл и при желании откройте историю или сравнение"
         );
 
         helpSections.add(
-            "*Подсказки:*\n" +
-            "• Для фото лучше отправлять чёткое и свежее изображение\n" +
-            "• Для лица подходит фото анфас при хорошем освещении\n" +
-            "• Для тела лучше использовать фото в полный рост\n" +
-            "• Замеры вводите только числами, без букв и лишних символов"
+            "*Подсказки:*\n"
+                + "• Для фото лучше отправлять чёткое и свежее изображение\n"
+                + "• Для лица подходит фото анфас при хорошем освещении\n"
+                + "• Для тела лучше использовать фото в полный рост\n"
+                + "• Замеры вводите только числами, без букв и лишних символов"
         );
 
         StringBuilder helpText = new StringBuilder();
@@ -212,45 +241,52 @@ public class RatingBot extends TelegramLongPollingBot {
         mainMenu(chatId);
     }
 
-    private void handleGenderSelection(Long chatId, String text, UserSession s) {
-        String previousGender = s.getGender();
-        String previousRatingType = s.getRatingType();
+    private void handleGenderSelection(Long chatId, String text, UserSession session) {
+        String previousGender = session.getGender();
+        String previousRatingType = session.getRatingType();
+
         if (text.equals("👨 Мужчина")) {
-            s.setGender("male");
+            session.setGender("male");
         } else if (text.equals("👩 Женщина")) {
-            s.setGender("female");
+            session.setGender("female");
         } else {
             sendText(chatId, "❌ Используйте кнопки");
             return;
         }
 
-        s.pushUndoAction(UserState.SELECTING_GENDER, previousGender, previousRatingType, null);
-        s.setState(UserState.SELECTING_RATING_TYPE);
+        session.pushUndoAction(UserState.SELECTING_GENDER, previousGender, previousRatingType, null);
+        session.setState(UserState.SELECTING_RATING_TYPE);
         showRatingTypeMenu(chatId);
     }
 
-    private void handleRatingTypeSelection(Long chatId, String text, UserSession s) {
-        s.pushUndoAction(UserState.SELECTING_RATING_TYPE, s.getGender(), s.getRatingType(), null);
+    private void handleRatingTypeSelection(Long chatId, String text, UserSession session) {
+        session.pushUndoAction(
+            UserState.SELECTING_RATING_TYPE,
+            session.getGender(),
+            session.getRatingType(),
+            null
+        );
+
         if (text.equals("📸 Оценка лица по фото")) {
-            s.setRatingType("face");
-            s.setState(UserState.WAITING_FOR_PHOTO);
-            sendPhotoPrompt(chatId, s);
+            session.setRatingType("face");
+            session.setState(UserState.WAITING_FOR_PHOTO);
+            sendPhotoPrompt(chatId, session);
         } else if (text.equals("🏃 Оценка тела по фото")) {
-            s.setRatingType("body");
-            s.setState(UserState.WAITING_FOR_PHOTO);
-            sendPhotoPrompt(chatId, s);
+            session.setRatingType("body");
+            session.setState(UserState.WAITING_FOR_PHOTO);
+            sendPhotoPrompt(chatId, session);
         } else if (text.equals("📏 Оценка тела по замерам")) {
-            s.setRatingType("measure");
-            s.getBodyMeasurements().clear();
-            s.setState(UserState.WAITING_FOR_HEIGHT);
-            sendMeasurementPrompt(chatId, s);
+            session.setRatingType("measure");
+            session.getBodyMeasurements().clear();
+            session.setState(UserState.WAITING_FOR_HEIGHT);
+            sendMeasurementPrompt(chatId, session);
         } else {
-            s.undoLastAction();
+            session.undoLastAction();
             sendText(chatId, "❌ Используйте кнопки");
         }
     }
 
-    private void handleMeasurementStep(Long chatId, String text, UserSession s) {
+    private void handleMeasurementStep(Long chatId, String text, UserSession session) {
         try {
             double value = Double.parseDouble(text.trim());
 
@@ -259,59 +295,99 @@ public class RatingBot extends TelegramLongPollingBot {
                 return;
             }
 
-            if (s.getState() == UserState.WAITING_FOR_HEIGHT) {
-                s.pushUndoAction(UserState.WAITING_FOR_HEIGHT, s.getGender(), s.getRatingType(), "height");
-                s.getBodyMeasurements().put("height", value);
-                s.setState(UserState.WAITING_FOR_WEIGHT);
-                sendMeasurementPrompt(chatId, s, "✅ Рост: " + String.format("%.0f", value) + " см");
-            } else if (s.getState() == UserState.WAITING_FOR_WEIGHT) {
-                s.pushUndoAction(UserState.WAITING_FOR_WEIGHT, s.getGender(), s.getRatingType(), "weight");
-                s.getBodyMeasurements().put("weight", value);
-                s.setState(UserState.WAITING_FOR_CHEST);
-                sendMeasurementPrompt(chatId, s, "✅ Вес: " + String.format("%.1f", value) + " кг");
-            } else if (s.getState() == UserState.WAITING_FOR_CHEST) {
-                s.pushUndoAction(UserState.WAITING_FOR_CHEST, s.getGender(), s.getRatingType(), "chest");
-                s.getBodyMeasurements().put("chest", value);
-                s.setState(UserState.WAITING_FOR_WAIST);
-                sendMeasurementPrompt(chatId, s, "✅ Грудь: " + String.format("%.0f", value) + " см");
-            } else if (s.getState() == UserState.WAITING_FOR_WAIST) {
-                s.pushUndoAction(UserState.WAITING_FOR_WAIST, s.getGender(), s.getRatingType(), "waist");
-                s.getBodyMeasurements().put("waist", value);
-                if (s.getGender().equals("male")) {
-                    s.setState(UserState.WAITING_FOR_HIPS);
+            if (session.getState() == UserState.WAITING_FOR_HEIGHT) {
+                session.pushUndoAction(
+                    UserState.WAITING_FOR_HEIGHT,
+                    session.getGender(),
+                    session.getRatingType(),
+                    "height"
+                );
+                session.getBodyMeasurements().put("height", value);
+                session.setState(UserState.WAITING_FOR_WEIGHT);
+                sendMeasurementPrompt(chatId, session, "✅ Рост: " + String.format("%.0f", value) + " см");
+            } else if (session.getState() == UserState.WAITING_FOR_WEIGHT) {
+                session.pushUndoAction(
+                    UserState.WAITING_FOR_WEIGHT,
+                    session.getGender(),
+                    session.getRatingType(),
+                    "weight"
+                );
+                session.getBodyMeasurements().put("weight", value);
+                session.setState(UserState.WAITING_FOR_CHEST);
+                sendMeasurementPrompt(chatId, session, "✅ Вес: " + String.format("%.1f", value) + " кг");
+            } else if (session.getState() == UserState.WAITING_FOR_CHEST) {
+                session.pushUndoAction(
+                    UserState.WAITING_FOR_CHEST,
+                    session.getGender(),
+                    session.getRatingType(),
+                    "chest"
+                );
+                session.getBodyMeasurements().put("chest", value);
+                session.setState(UserState.WAITING_FOR_WAIST);
+                sendMeasurementPrompt(chatId, session, "✅ Грудь: " + String.format("%.0f", value) + " см");
+            } else if (session.getState() == UserState.WAITING_FOR_WAIST) {
+                session.pushUndoAction(
+                    UserState.WAITING_FOR_WAIST,
+                    session.getGender(),
+                    session.getRatingType(),
+                    "waist"
+                );
+                session.getBodyMeasurements().put("waist", value);
+                session.setState(UserState.WAITING_FOR_HIPS);
+                sendMeasurementPrompt(chatId, session, "✅ Талия: " + String.format("%.0f", value) + " см");
+            } else if (session.getState() == UserState.WAITING_FOR_HIPS) {
+                if ("male".equals(session.getGender())) {
+                    session.pushUndoAction(
+                        UserState.WAITING_FOR_HIPS,
+                        session.getGender(),
+                        session.getRatingType(),
+                        "shoulder"
+                    );
+                    session.getBodyMeasurements().put("shoulder", value);
+                    sendText(
+                        chatId,
+                        "✅ Плечи: " + String.format("%.0f", value) + " см\n\n🎉 *Данные собраны! Идет анализ...*"
+                    );
                 } else {
-                    s.setState(UserState.WAITING_FOR_HIPS);
+                    session.pushUndoAction(
+                        UserState.WAITING_FOR_HIPS,
+                        session.getGender(),
+                        session.getRatingType(),
+                        "hips"
+                    );
+                    session.getBodyMeasurements().put("hips", value);
+                    sendText(
+                        chatId,
+                        "✅ Бёдра: " + String.format("%.0f", value) + " см\n\n🎉 *Данные собраны! Идет анализ...*"
+                    );
                 }
-                sendMeasurementPrompt(chatId, s, "✅ Талия: " + String.format("%.0f", value) + " см");
-            } else if (s.getState() == UserState.WAITING_FOR_HIPS) {
-                if (s.getGender().equals("male")) {
-                    s.pushUndoAction(UserState.WAITING_FOR_HIPS, s.getGender(), s.getRatingType(), "shoulder");
-                    s.getBodyMeasurements().put("shoulder", value);
-                    sendText(chatId, "✅ Плечи: " + String.format("%.0f", value) + " см\n\n🎉 *Данные собраны! Идет анализ...*");
-                } else {
-                    s.pushUndoAction(UserState.WAITING_FOR_HIPS, s.getGender(), s.getRatingType(), "hips");
-                    s.getBodyMeasurements().put("hips", value);
-                    sendText(chatId, "✅ Бёдра: " + String.format("%.0f", value) + " см\n\n🎉 *Данные собраны! Идет анализ...*");
-                }
-                finalizeMeasurements(chatId, s);
+                finalizeMeasurements(chatId, session);
             }
         } catch (NumberFormatException e) {
             sendText(chatId, "❌ Ошибка! Введите корректное число\n(без букв и спецсимволов)");
         }
     }
 
-    private void finalizeMeasurements(Long chatId, UserSession s) {
+    private void finalizeMeasurements(Long chatId, UserSession session) {
         try {
-            double rating = RatingUtils.evaluateBodyByMeasurements(s.getBodyMeasurements(), s.getGender());
-            Double previousRating = s.getPreviousRating("measure");
-            s.setLastRating(rating);
-            s.addHistoryEntry("measure", s.getGender(), rating);
-            persistSessions();
-            String result = RatingUtils.generateMeasurementsMessage(
-                s.getBodyMeasurements(), rating, s.isPremium(), s.getGender(), previousRating
+            double rating = RatingUtils.evaluateBodyByMeasurements(
+                session.getBodyMeasurements(),
+                session.getGender()
             );
-            s.clearUndoActions();
-            s.setState(UserState.SELECTING_GENDER);
+            Double previousRating = session.getPreviousRating("measure");
+            session.setLastRating(rating);
+            session.addHistoryEntry("measure", session.getGender(), rating);
+            persistSessions();
+
+            String result = RatingUtils.generateMeasurementsMessage(
+                session.getBodyMeasurements(),
+                rating,
+                session.isPremium(),
+                session.getGender(),
+                previousRating
+            );
+            session.clearUndoActions();
+            session.setState(UserState.SELECTING_GENDER);
             sendText(chatId, result);
             mainMenu(chatId);
         } catch (Exception e) {
@@ -320,28 +396,36 @@ public class RatingBot extends TelegramLongPollingBot {
         }
     }
 
-    private void handlePhoto(Long chatId, Message msg, UserSession s) {
+    private void handlePhoto(Long chatId, Message msg, UserSession session) {
         try {
             String photoId = msg.getPhoto().get(msg.getPhoto().size() - 1).getFileId();
+            String ratingType = session.getRatingType();
+            String gender = session.getGender();
             sendText(chatId, "📸 Фото получено! Идет анализ...");
 
             double rating;
-            if (s.getRatingType().equals("face")) {
-                rating = RatingUtils.evaluateFace(photoId, s.getGender());
+            if ("face".equals(ratingType)) {
+                rating = RatingUtils.evaluateFace(photoId, gender);
             } else {
-                rating = RatingUtils.evaluateBodyByPhoto(photoId, s.getGender());
+                rating = RatingUtils.evaluateBodyByPhoto(photoId, gender);
             }
 
-            Double previousRating = s.getPreviousRating(s.getRatingType());
-            s.setLastRating(rating);
-            s.addHistoryEntry(s.getRatingType(), s.getGender(), rating);
+            Double previousRating = session.getPreviousRating(ratingType);
+            session.setLastRating(rating);
+            session.addHistoryEntry(ratingType, gender, rating);
             persistSessions();
+
             String result = RatingUtils.generateRatingMessage(
-                rating, s.isPremium(), s.getGender(), previousRating, s.getRatingType()
+                rating,
+                session.isPremium(),
+                gender,
+                previousRating,
+                ratingType
             );
-            s.clearUndoActions();
-            s.setState(UserState.SELECTING_GENDER);
+            session.clearUndoActions();
+            session.setState(UserState.SELECTING_GENDER);
             sendText(chatId, result);
+            maybeSendFaceEdit(chatId, photoId, gender, ratingType, rating);
             mainMenu(chatId);
         } catch (Exception e) {
             sendText(chatId, "❌ Ошибка при обработке фото. Попробуйте еще раз.");
@@ -349,10 +433,14 @@ public class RatingBot extends TelegramLongPollingBot {
         }
     }
 
-    private void showHistory(Long chatId, UserSession s) {
-        List<UserSession.RatingHistoryEntry> history = s.getHistory();
+    private void showHistory(Long chatId, UserSession session) {
+        List<UserSession.RatingHistoryEntry> history = session.getHistory();
         if (history.isEmpty()) {
-            sendText(chatId, "📜 *История пуста*\n\nУ вас пока нет ни одной оценки.\nНажмите «🔄 Новая оценка», чтобы начать!");
+            sendText(
+                chatId,
+                "📜 *История пуста*\n\nУ вас пока нет ни одной оценки.\n"
+                    + "Нажмите «🔄 Новая оценка», чтобы начать!"
+            );
             mainMenu(chatId);
             return;
         }
@@ -360,22 +448,23 @@ public class RatingBot extends TelegramLongPollingBot {
         StringBuilder sb = new StringBuilder("📜 *История ваших оценок*\n");
         sb.append("Всего: ").append(history.size()).append("\n\n");
 
-        if (s.isPremium()) {
+        if (session.isPremium()) {
             double best = 0.0;
             double sum = 0.0;
             Map<String, Integer> byType = countHistoryByType(history);
+
             for (UserSession.RatingHistoryEntry entry : history) {
                 sum += entry.getRating();
                 best = Math.max(best, entry.getRating());
             }
+
             double average = sum / history.size();
             String typeSummary = buildTypeSummary(byType);
+
             sb.append("💎 *Премиум-статистика*\n");
             sb.append("Средний балл: ").append(String.format("%.2f", average)).append("\n");
             sb.append("Лучший балл: ").append(String.format("%.1f", best)).append("\n");
-            sb.append("По типам: ");
-            sb.append(typeSummary);
-            sb.append("\n\n");
+            sb.append("По типам: ").append(typeSummary).append("\n\n");
 
             int idx = 1;
             for (UserSession.RatingHistoryEntry entry : history) {
@@ -410,7 +499,8 @@ public class RatingBot extends TelegramLongPollingBot {
     }
 
     private List<UserSession.RatingHistoryEntry> getRecentHistory(
-        List<UserSession.RatingHistoryEntry> history, int limit
+        List<UserSession.RatingHistoryEntry> history,
+        int limit
     ) {
         ArrayList<UserSession.RatingHistoryEntry> recentHistory = new ArrayList<>();
         if (limit <= 0) {
@@ -453,63 +543,75 @@ public class RatingBot extends TelegramLongPollingBot {
     }
 
     private void mainMenu(Long chatId) {
-        SendMessage m = new SendMessage();
-        m.setChatId(chatId.toString());
-        m.setText("🏠 *Главное меню*\n\nЧто хотите сделать?");
-        m.setParseMode("Markdown");
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId.toString());
+        message.setText("🏠 *Главное меню*\n\nЧто хотите сделать?");
+        message.setParseMode("Markdown");
 
-        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
-        kb.setResizeKeyboard(true);
+        ReplyKeyboardMarkup keyboard = new ReplyKeyboardMarkup();
+        keyboard.setResizeKeyboard(true);
+
         List<KeyboardRow> rows = new ArrayList<>();
-        KeyboardRow r1 = new KeyboardRow();
-        r1.add("🔄 Новая оценка");
-        r1.add("⭐ Сравнить со звездой");
-        rows.add(r1);
-        KeyboardRow r2 = new KeyboardRow();
-        r2.add("💎 Премиум");
-        r2.add("📜 История");
-        rows.add(r2);
-        KeyboardRow r3 = new KeyboardRow();
-        r3.add("❓ Помощь");
-        r3.add(UNDO_BUTTON);
-        rows.add(r3);
-        kb.setKeyboard(rows);
-        m.setReplyMarkup(kb);
-        try { execute(m); } catch (TelegramApiException e) {}
+
+        KeyboardRow row1 = new KeyboardRow();
+        row1.add("🔄 Новая оценка");
+        row1.add("⭐ Сравнить со звездой");
+        rows.add(row1);
+
+        KeyboardRow row2 = new KeyboardRow();
+        row2.add("💎 Премиум");
+        row2.add("📜 История");
+        rows.add(row2);
+
+        KeyboardRow row3 = new KeyboardRow();
+        row3.add("❓ Помощь");
+        row3.add(UNDO_BUTTON);
+        rows.add(row3);
+
+        keyboard.setKeyboard(rows);
+        message.setReplyMarkup(keyboard);
+
+        try {
+            execute(message);
+        } catch (TelegramApiException ignored) {
+        }
     }
 
-    private void undo(Long chatId, UserSession s) {
-        if (!s.undoLastAction()) {
+    private void undo(Long chatId, UserSession session) {
+        if (!session.undoLastAction()) {
             sendText(chatId, "↩️ Нечего отменять.");
             return;
         }
-        sendStatePrompt(chatId, s, "↩️ Последний шаг отменён.");
+        sendStatePrompt(chatId, session, "↩️ Последний шаг отменён.");
     }
 
-    private void sendStatePrompt(Long chatId, UserSession s, String prefix) {
+    private void sendStatePrompt(Long chatId, UserSession session, String prefix) {
         StringBuilder text = new StringBuilder();
         if (prefix != null && !prefix.isBlank()) {
             text.append(prefix).append("\n\n");
         }
 
-        if (s.getState() == UserState.SELECTING_GENDER) {
+        if (session.getState() == UserState.SELECTING_GENDER) {
             showGenderMenu(chatId, text.append("Выберите ваш пол:").toString());
             return;
         }
-        if (s.getState() == UserState.SELECTING_RATING_TYPE) {
+
+        if (session.getState() == UserState.SELECTING_RATING_TYPE) {
             showRatingTypeMenu(chatId, text.append("📋 Выберите тип оценки:").toString());
             return;
         }
-        if (s.getState() == UserState.WAITING_FOR_PHOTO) {
-            sendPhotoPrompt(chatId, s, text.toString());
+
+        if (session.getState() == UserState.WAITING_FOR_PHOTO) {
+            sendPhotoPrompt(chatId, session, text.toString());
             return;
         }
-        if (s.getState() == UserState.WAITING_FOR_HEIGHT ||
-            s.getState() == UserState.WAITING_FOR_WEIGHT ||
-            s.getState() == UserState.WAITING_FOR_CHEST ||
-            s.getState() == UserState.WAITING_FOR_WAIST ||
-            s.getState() == UserState.WAITING_FOR_HIPS) {
-            sendMeasurementPrompt(chatId, s, text.toString().trim());
+
+        if (session.getState() == UserState.WAITING_FOR_HEIGHT
+            || session.getState() == UserState.WAITING_FOR_WEIGHT
+            || session.getState() == UserState.WAITING_FOR_CHEST
+            || session.getState() == UserState.WAITING_FOR_WAIST
+            || session.getState() == UserState.WAITING_FOR_HIPS) {
+            sendMeasurementPrompt(chatId, session, text.toString().trim());
             return;
         }
 
@@ -521,18 +623,21 @@ public class RatingBot extends TelegramLongPollingBot {
     }
 
     private void showGenderMenu(Long chatId, String text) {
-        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
-        kb.setResizeKeyboard(true);
+        ReplyKeyboardMarkup keyboard = new ReplyKeyboardMarkup();
+        keyboard.setResizeKeyboard(true);
+
         List<KeyboardRow> rows = new ArrayList<>();
         KeyboardRow row = new KeyboardRow();
         row.add("👨 Мужчина");
         row.add("👩 Женщина");
         rows.add(row);
+
         KeyboardRow undoRow = new KeyboardRow();
         undoRow.add(UNDO_BUTTON);
         rows.add(undoRow);
-        kb.setKeyboard(rows);
-        sendText(chatId, text, kb);
+
+        keyboard.setKeyboard(rows);
+        sendText(chatId, text, keyboard);
     }
 
     private void showRatingTypeMenu(Long chatId) {
@@ -540,49 +645,54 @@ public class RatingBot extends TelegramLongPollingBot {
     }
 
     private void showRatingTypeMenu(Long chatId, String text) {
-        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
-        kb.setResizeKeyboard(true);
+        ReplyKeyboardMarkup keyboard = new ReplyKeyboardMarkup();
+        keyboard.setResizeKeyboard(true);
+
         List<KeyboardRow> rows = new ArrayList<>();
-        KeyboardRow r1 = new KeyboardRow();
-        r1.add("📸 Оценка лица по фото");
-        r1.add("🏃 Оценка тела по фото");
-        rows.add(r1);
-        KeyboardRow r2 = new KeyboardRow();
-        r2.add("📏 Оценка тела по замерам");
-        rows.add(r2);
+
+        KeyboardRow row1 = new KeyboardRow();
+        row1.add("📸 Оценка лица по фото");
+        row1.add("🏃 Оценка тела по фото");
+        rows.add(row1);
+
+        KeyboardRow row2 = new KeyboardRow();
+        row2.add("📏 Оценка тела по замерам");
+        rows.add(row2);
+
         KeyboardRow undoRow = new KeyboardRow();
         undoRow.add(UNDO_BUTTON);
         rows.add(undoRow);
-        kb.setKeyboard(rows);
-        sendText(chatId, text, kb);
+
+        keyboard.setKeyboard(rows);
+        sendText(chatId, text, keyboard);
     }
 
-    private void sendPhotoPrompt(Long chatId, UserSession s) {
-        sendPhotoPrompt(chatId, s, "");
+    private void sendPhotoPrompt(Long chatId, UserSession session) {
+        sendPhotoPrompt(chatId, session, "");
     }
 
-    private void sendPhotoPrompt(Long chatId, UserSession s, String prefix) {
-        String baseText = "face".equals(s.getRatingType())
+    private void sendPhotoPrompt(Long chatId, UserSession session, String prefix) {
+        String baseText = "face".equals(session.getRatingType())
             ? "📸 Отправьте фото лица\n\nТребования: четкое фото, анфас, хорошее освещение"
             : "📸 Отправьте фото тела\n\nТребования: четкое фото, в полный рост";
         sendText(chatId, joinPrefix(prefix, baseText), buildUndoKeyboard());
     }
 
-    private void sendMeasurementPrompt(Long chatId, UserSession s) {
-        sendMeasurementPrompt(chatId, s, null);
+    private void sendMeasurementPrompt(Long chatId, UserSession session) {
+        sendMeasurementPrompt(chatId, session, null);
     }
 
-    private void sendMeasurementPrompt(Long chatId, UserSession s, String prefix) {
+    private void sendMeasurementPrompt(Long chatId, UserSession session, String prefix) {
         String prompt;
-        if (s.getState() == UserState.WAITING_FOR_HEIGHT) {
+        if (session.getState() == UserState.WAITING_FOR_HEIGHT) {
             prompt = "📏 *ПОШАГОВЫЙ ВВОД ЗАМЕРОВ*\n\n📍 Шаг 1 из 5\n\n*Введите ваш рост (см):*\n(например: 175)";
-        } else if (s.getState() == UserState.WAITING_FOR_WEIGHT) {
+        } else if (session.getState() == UserState.WAITING_FOR_WEIGHT) {
             prompt = "📍 Шаг 2 из 5\n\n*Введите ваш вес (кг):*\n(например: 75)";
-        } else if (s.getState() == UserState.WAITING_FOR_CHEST) {
+        } else if (session.getState() == UserState.WAITING_FOR_CHEST) {
             prompt = "📍 Шаг 3 из 5\n\n*Введите объём груди (см):*\n(например: 100)";
-        } else if (s.getState() == UserState.WAITING_FOR_WAIST) {
+        } else if (session.getState() == UserState.WAITING_FOR_WAIST) {
             prompt = "📍 Шаг 4 из 5\n\n*Введите объём талии (см):*\n(например: 80)";
-        } else if ("male".equals(s.getGender())) {
+        } else if ("male".equals(session.getGender())) {
             prompt = "📍 Шаг 5 из 5\n\n*Введите ширину плеч (см):*\n(например: 110)";
         } else {
             prompt = "📍 Шаг 5 из 5\n\n*Введите объём бёдер (см):*\n(например: 90)";
@@ -591,14 +701,16 @@ public class RatingBot extends TelegramLongPollingBot {
     }
 
     private ReplyKeyboardMarkup buildUndoKeyboard() {
-        ReplyKeyboardMarkup kb = new ReplyKeyboardMarkup();
-        kb.setResizeKeyboard(true);
+        ReplyKeyboardMarkup keyboard = new ReplyKeyboardMarkup();
+        keyboard.setResizeKeyboard(true);
+
         List<KeyboardRow> rows = new ArrayList<>();
         KeyboardRow row = new KeyboardRow();
         row.add(UNDO_BUTTON);
         rows.add(row);
-        kb.setKeyboard(rows);
-        return kb;
+        keyboard.setKeyboard(rows);
+
+        return keyboard;
     }
 
     private String joinPrefix(String prefix, String body) {
@@ -613,15 +725,74 @@ public class RatingBot extends TelegramLongPollingBot {
     }
 
     private void sendText(Long chatId, String text, ReplyKeyboardMarkup keyboard) {
-        SendMessage m = new SendMessage();
-        m.setChatId(chatId.toString());
-        m.setText(text);
-        m.setParseMode("Markdown");
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId.toString());
+        message.setText(text);
+        message.setParseMode("Markdown");
         if (keyboard != null) {
-            m.setReplyMarkup(keyboard);
+            message.setReplyMarkup(keyboard);
         }
-        try { execute(m); } catch (TelegramApiException e) {
+
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
             System.err.println("Ошибка отправки: " + e.getMessage());
+        }
+    }
+
+    private void maybeSendFaceEdit(
+        Long chatId,
+        String photoId,
+        String gender,
+        String ratingType,
+        double rating
+    ) {
+        if (!FaceEditService.shouldCreateFaceEdit(ratingType, rating)) {
+            return;
+        }
+
+        FaceEditService.RenderResult renderResult = buildFaceEdit(chatId, photoId, gender, rating);
+        if (renderResult.isReady()) {
+            sendRenderedEdit(chatId, renderResult.getOutput());
+            return;
+        }
+
+        if (renderResult.getMessage() != null) {
+            System.out.println("Face edit skipped for chat " + chatId + ": " + renderResult.getMessage());
+        }
+    }
+
+    private FaceEditService.RenderResult buildFaceEdit(
+        Long chatId,
+        String photoId,
+        String gender,
+        double rating
+    ) {
+        try {
+            GetFile getFileMethod = new GetFile();
+            getFileMethod.setFileId(photoId);
+
+            org.telegram.telegrambots.meta.api.objects.File tgFile = execute(getFileMethod);
+            Path facePhoto = FaceEditService.buildPhotoPath(chatId, tgFile.getFilePath());
+            downloadFile(tgFile.getFilePath(), facePhoto.toFile());
+            return FaceEditService.renderFaceEdit(chatId, gender, rating, facePhoto);
+        } catch (Exception e) {
+            return FaceEditService.RenderResult.failed(
+                "Не удалось подготовить face edit: " + e.getMessage()
+            );
+        }
+    }
+
+    private void sendRenderedEdit(Long chatId, Path videoPath) {
+        SendVideo video = new SendVideo();
+        video.setChatId(chatId.toString());
+        video.setVideo(new InputFile(videoPath.toFile()));
+        video.setCaption("🎬 Эдит готов");
+        video.setSupportsStreaming(true);
+        try {
+            execute(video);
+        } catch (TelegramApiException e) {
+            System.err.println("Не удалось отправить эдит: " + e.getMessage());
         }
     }
 }

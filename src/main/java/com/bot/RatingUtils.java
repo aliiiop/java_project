@@ -37,36 +37,24 @@ public class RatingUtils {
     if (photoId == null || photoId.isEmpty()) return 5.0;
     
     try {
-        // Получаем URL фото
         String photoUrl = getPhotoUrl(photoId);
         if (photoUrl == null) return 5.0;
         
-        // Вызываем Python-сервис
-        String pythonUrl = "http://localhost:5001/analyze";
-        String jsonBody = String.format("{\"photo_url\":\"%s\",\"gender\":\"%s\"}", photoUrl, gender);
+        // Вызываем Face++ API вместо Python
+        double rating = FacePlusPlusAnalyzer.analyzeFace(photoUrl);
         
-        HttpPost post = new HttpPost(pythonUrl);
-        post.setEntity(new StringEntity(jsonBody, ContentType.APPLICATION_JSON));
-        post.setHeader("Content-Type", "application/json");
+        // Штраф за несовпадение пола (если нужно)
+        // Face++ сам определяет пол, можем сравнить
         
-        try (CloseableHttpClient client = HttpClients.createDefault();
-             CloseableHttpResponse response = client.execute(post)) {
-            
-            String json = EntityUtils.toString(response.getEntity());
-            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-            
-            if (obj.has("rating")) {
-                return obj.get("rating").getAsDouble();
-            }
-        }
+        return rating;
+        
     } catch (Exception e) {
         e.printStackTrace();
+        return 5.0;
     }
-    
-    return 5.0; // fallback
 }
 
-    private static String getPhotoUrl(String fileId) throws Exception {
+private static String getPhotoUrl(String fileId) throws Exception {
     String token = "8762441185:AAHBI8LCr47AD6XJRx-bakOSLHfzGgTVpuk";
     String url = "https://api.telegram.org/bot" + token + "/getFile?file_id=" + fileId;
     
@@ -82,7 +70,8 @@ public class RatingUtils {
         }
     }
     return null;
-}   
+}
+
 
     public static double evaluateBodyByPhoto(String photoId, String gender) {
         if (photoId == null || photoId.isEmpty()) return 0;

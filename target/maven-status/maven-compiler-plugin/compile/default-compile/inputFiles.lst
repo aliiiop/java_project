@@ -1,7 +1,10 @@
-/Users/tamerlanbeketov/Downloads/java_project-main/Без названия/java_project/src/main/java/com/bot/RatingBot.java
-/Users/tamerlanbeketov/Downloads/java_project-main/Без названия/java_project/src/main/java/com/bot/SessionStorage.java
-/Users/tamerlanbeketov/Downloads/java_project-main/Без названия/java_project/src/main/java/com/bot/HistoryStorage.java
-/Users/tamerlanbeketov/Downloads/java_project-main/Без названия/java_project/src/main/java/com/bot/UserSession.java
-/Users/tamerlanbeketov/Downloads/java_project-main/Без названия/java_project/src/main/java/com/bot/RatingUtils.java
-/Users/tamerlanbeketov/Downloads/java_project-main/Без названия/java_project/src/main/java/com/bot/UserState.java
-/Users/tamerlanbeketov/Downloads/java_project-main/Без названия/java_project/src/main/java/com/bot/Main.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/FaceEditService.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/RatingBot.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/Main.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/SessionStorage.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/ReceiptAnalyzer.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/UserState.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/FacePlusPlusAnalyzer.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/HistoryStorage.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/RatingUtils.java
+/Users/tamerlanbeketov/Documents/GitHub/java_project/src/main/java/com/bot/UserSession.java
