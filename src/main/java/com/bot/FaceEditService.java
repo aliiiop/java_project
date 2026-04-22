@@ -8,11 +8,15 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 public class FaceEditService {
     private static final Path MEDIA_ROOT = Paths.get("media");
@@ -27,9 +31,6 @@ public class FaceEditService {
     private static final List<String> FFMPEG_CANDIDATES =
         List.of(
             "ffmpeg",
-            "C:\\Users\\пк\\ffmpeg-8.1",
-            "C:\\Users\\пк\\ffmpeg-8.1\\bin\\ffmpeg.exe",
-            "C:\\Users\\пк\\ffmpeg-8.1\\ffmpeg.exe",
             "C:\\Program Files\\BlueStacks_nxt\\ffmpeg.exe"
         );
     private static final List<String> VIDEO_ENCODERS =
@@ -50,7 +51,7 @@ public class FaceEditService {
             Files.createDirectories(PHOTO_DIR);
             Files.createDirectories(OUTPUT_DIR);
         } catch (IOException e) {
-            throw new IllegalStateException("Не удалось создать media-папки", e);
+            throw new IllegalStateException("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ media-РїР°РїРєРё", e);
         }
     }
 
@@ -68,19 +69,19 @@ public class FaceEditService {
         ensureMediaDirectories();
         EditVerdict verdict = EditVerdict.fromFaceRating(rating);
         if (!verdict.requiresTemplate()) {
-            return RenderResult.skipped("Нейтральный вердикт, эдит не нужен.");
+            return RenderResult.skipped("РќРµР№С‚СЂР°Р»СЊРЅС‹Р№ РІРµСЂРґРёРєС‚, СЌРґРёС‚ РЅРµ РЅСѓР¶РµРЅ.");
         }
 
         Path template = findTemplate(gender, verdict);
         if (template == null) {
             return RenderResult.skipped(
-                "Не найден шаблон для " + gender + "/" + verdict.getTemplateSuffix()
+                "РќРµ РЅР°Р№РґРµРЅ С€Р°Р±Р»РѕРЅ РґР»СЏ " + gender + "/" + verdict.getTemplateSuffix()
             );
         }
 
         String ffmpeg = findFfmpegExecutable();
         if (ffmpeg == null) {
-            return RenderResult.skipped("ffmpeg не найден.");
+            return RenderResult.skipped("ffmpeg РЅРµ РЅР°Р№РґРµРЅ.");
         }
 
         try {
@@ -89,23 +90,107 @@ public class FaceEditService {
             runRender(ffmpeg, facePhoto, template, output, videoInfo);
             return RenderResult.created(output);
         } catch (Exception e) {
-            return RenderResult.failed("Рендер не удался: " + e.getMessage());
+            return RenderResult.failed("Р РµРЅРґРµСЂ РЅРµ СѓРґР°Р»СЃСЏ: " + e.getMessage());
         }
     }
 
     private static Path findTemplate(String gender, EditVerdict verdict) {
-        for (String baseName : getTemplateBaseNames(gender, verdict)) {
-            for (String extension : TEMPLATE_EXTENSIONS) {
-                Path candidate = TEMPLATE_DIR.resolve(baseName + extension);
-                if (Files.isRegularFile(candidate)) {
-                    return candidate;
-                }
-            }
-        }
-        return null;
+        return findTemplate(TEMPLATE_DIR, gender, verdict);
     }
 
-    private static List<String> getTemplateBaseNames(String gender, EditVerdict verdict) {
+    static Path findTemplate(Path templateDir, String gender, EditVerdict verdict) {
+        if (templateDir == null || !Files.isDirectory(templateDir)) {
+            return null;
+        }
+
+        for (Path candidate : buildPreferredTemplateCandidates(templateDir, gender, verdict)) {
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+
+        List<String> baseNames = getTemplateBaseNames(gender, verdict);
+        List<String> folderNames = getTemplateFolderNames(gender);
+        try (Stream<Path> files = Files.walk(templateDir, 2)) {
+            return files
+                .filter(Files::isRegularFile)
+                .filter(FaceEditService::hasSupportedTemplateExtension)
+                .filter(path -> matchesTemplate(path, templateDir, baseNames, folderNames, verdict))
+                .findFirst()
+                .orElse(null);
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    private static List<Path> buildPreferredTemplateCandidates(
+        Path templateDir,
+        String gender,
+        EditVerdict verdict
+    ) {
+        LinkedHashSet<Path> candidates = new LinkedHashSet<>();
+
+        for (String baseName : getTemplateBaseNames(gender, verdict)) {
+            addTemplateCandidates(candidates, templateDir.resolve(baseName));
+        }
+
+        for (String folderName : getTemplateFolderNames(gender)) {
+            Path folder = templateDir.resolve(folderName);
+            addTemplateCandidates(candidates, folder.resolve(verdict.getTemplateSuffix()));
+            addTemplateCandidates(candidates, folder.resolve(folderName + "_" + verdict.getTemplateSuffix()));
+        }
+
+        return new ArrayList<>(candidates);
+    }
+
+    private static void addTemplateCandidates(Set<Path> candidates, Path stem) {
+        for (String extension : TEMPLATE_EXTENSIONS) {
+            candidates.add(Paths.get(stem.toString() + extension));
+            candidates.add(Paths.get(stem.toString() + extension.toUpperCase(Locale.ROOT)));
+        }
+    }
+
+    private static boolean matchesTemplate(
+        Path path,
+        Path templateDir,
+        List<String> baseNames,
+        List<String> folderNames,
+        EditVerdict verdict
+    ) {
+        String baseName = removeExtension(path.getFileName().toString()).toLowerCase(Locale.ROOT);
+        if (baseNames.contains(baseName)) {
+            return true;
+        }
+
+        if (!baseName.equals(verdict.getTemplateSuffix())) {
+            return false;
+        }
+
+        Path parent = path.getParent();
+        if (parent == null) {
+            return false;
+        }
+
+        Path relativeParent = templateDir.relativize(parent);
+        if (relativeParent.getNameCount() != 1) {
+            return false;
+        }
+
+        String folderName = relativeParent.getFileName().toString().toLowerCase(Locale.ROOT);
+        return folderNames.contains(folderName);
+    }
+
+    private static boolean hasSupportedTemplateExtension(Path path) {
+        String fileName = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        for (String extension : TEMPLATE_EXTENSIONS) {
+            if (fileName.endsWith(extension)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static List<String> getTemplateBaseNames(String gender, EditVerdict verdict) {
         ArrayList<String> names = new ArrayList<>();
         if ("male".equals(gender)) {
             names.add("male_" + verdict.getTemplateSuffix());
@@ -116,10 +201,23 @@ public class FaceEditService {
         return names;
     }
 
+    static List<String> getTemplateFolderNames(String gender) {
+        ArrayList<String> names = new ArrayList<>();
+        if ("male".equals(gender)) {
+            names.add("male");
+        } else if ("female".equals(gender)) {
+            names.add("woman");
+            names.add("female");
+        }
+        return names;
+    }
+
     private static String findFfmpegExecutable() {
         ArrayList<String> candidates = new ArrayList<>();
         addConfiguredCandidate(candidates, System.getProperty(FFMPEG_PATH_PROPERTY));
         addConfiguredCandidate(candidates, System.getenv(FFMPEG_PATH_ENV));
+        addOverwolfFfmpegCandidates(candidates);
+        addUserHomeFfmpegCandidates(candidates);
         candidates.addAll(FFMPEG_CANDIDATES);
 
         for (String candidate : candidates) {
@@ -135,6 +233,53 @@ public class FaceEditService {
         if (value != null && !value.isBlank()) {
             candidates.add(value.trim());
         }
+    }
+
+    private static void addUserHomeFfmpegCandidates(List<String> candidates) {
+        String userHome = System.getProperty("user.home");
+        if (userHome == null || userHome.isBlank()) {
+            return;
+        }
+
+        Path ffmpegDir = Paths.get(userHome).resolve("ffmpeg-8.1");
+        candidates.add(ffmpegDir.toString());
+        candidates.add(ffmpegDir.resolve("bin").resolve("ffmpeg.exe").toString());
+        candidates.add(ffmpegDir.resolve("ffmpeg.exe").toString());
+    }
+
+    private static void addOverwolfFfmpegCandidates(List<String> candidates) {
+        String userHome = System.getProperty("user.home");
+        if (userHome == null || userHome.isBlank()) {
+            return;
+        }
+
+        Path overwolfExtensions = Paths.get(
+            userHome,
+            "AppData",
+            "Local",
+            "Overwolf",
+            "Extensions"
+        );
+        if (!Files.isDirectory(overwolfExtensions)) {
+            return;
+        }
+
+        try (Stream<Path> files = Files.walk(overwolfExtensions, 10)) {
+            files
+                .filter(path -> Files.isRegularFile(path) && "ffmpeg.exe".equalsIgnoreCase(path.getFileName().toString()))
+                .filter(FaceEditService::looksLikeOverwolfObsFfmpeg)
+                .sorted(Comparator.comparing(Path::toString))
+                .map(Path::toString)
+                .forEach(candidates::add);
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static boolean looksLikeOverwolfObsFfmpeg(Path path) {
+        String normalized = path.toString().toLowerCase(Locale.ROOT);
+        return normalized.contains("\\overwolf\\extensions\\")
+            && normalized.contains("\\obs\\bin\\")
+            && normalized.contains("\\ffmpeg.exe");
     }
 
     private static String resolveExecutableCandidate(String candidate) {
@@ -205,7 +350,7 @@ public class FaceEditService {
                 return new VideoInfo(width, height, safeDuration);
             }
         }
-        throw new IllegalStateException("Не удалось определить размер шаблона: " + template);
+        throw new IllegalStateException("РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСЂРµРґРµР»РёС‚СЊ СЂР°Р·РјРµСЂ С€Р°Р±Р»РѕРЅР°: " + template);
     }
 
     private static void runRender(
@@ -215,8 +360,9 @@ public class FaceEditService {
         Path output,
         VideoInfo info
     ) throws Exception {
-        String filter = String.format(Locale.US,
-            "[0:v]scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d[face];"
+        String filter = String.format(
+            Locale.US,
+            "[0:v]scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,setsar=1[face];"
                 + "[1:v]chromakey=0x00FF00:%.2f:%.2f[fg];"
                 + "[face][fg]overlay=0:0:format=auto,format=yuv420p[v]",
             info.width,
@@ -244,6 +390,8 @@ public class FaceEditService {
             command.add(filter);
             command.add("-map");
             command.add("[v]");
+            command.add("-map");
+            command.add("1:a?");
             command.add("-c:v");
             command.add(encoder);
             if ("libx264".equals(encoder)) {
@@ -255,7 +403,10 @@ public class FaceEditService {
             }
             command.add("-pix_fmt");
             command.add("yuv420p");
-            command.add("-an");
+            command.add("-c:a");
+            command.add("aac");
+            command.add("-b:a");
+            command.add("128k");
             command.add("-movflags");
             command.add("+faststart");
             command.add("-t");
@@ -275,7 +426,7 @@ public class FaceEditService {
             boolean finished = process.waitFor(2, TimeUnit.MINUTES);
             if (!finished) {
                 process.destroyForcibly();
-                errors.add(encoder + ": ffmpeg завис во время рендера");
+                errors.add(encoder + ": ffmpeg Р·Р°РІРёСЃ РІРѕ РІСЂРµРјСЏ СЂРµРЅРґРµСЂР°");
                 continue;
             }
 
@@ -308,6 +459,14 @@ public class FaceEditService {
         }
         String extension = originalFilePath.substring(dot).toLowerCase(Locale.ROOT);
         return extension.length() > 10 ? fallback : extension;
+    }
+
+    private static String removeExtension(String fileName) {
+        int dot = fileName.lastIndexOf('.');
+        if (dot <= 0) {
+            return fileName;
+        }
+        return fileName.substring(0, dot);
     }
 
     public static class RenderResult {
