@@ -16,7 +16,8 @@ public class ReceiptAnalyzer {
 
     private static final String CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
     private static final String API_KEY = "sk-ant-api03-Sq6...RwAA"; // <- вставь свой ключ
-    private static final String EXPECTED_CARD = "4400430354456268";
+    public static final String EXPECTED_CARD = "440043035445268";
+    public static final String EXPECTED_NAME = "KENZHALIN AMIR";
     private static final String EXPECTED_AMOUNT = "990";
 
     public static class AnalysisResult {
@@ -60,17 +61,16 @@ public class ReceiptAnalyzer {
         String base64Image = Base64.getEncoder().encodeToString(imageBytes);
         String mediaType = photoPath.endsWith(".png") ? "image/png" : "image/jpeg";
 
-        String prompt = "Проанализируй фото чека/перевода и ответь ТОЛЬКО в формате JSON:\n" +
+        String prompt = "Проанализируй фото чека/квитанции банковского перевода и ответь ТОЛЬКО в формате JSON:\n" +
             "{\"check_is_real\": boolean, \"amount\": \"строка\", \"recipient_card\": \"строка\", " +
-            "\"recipient_name\": \"строка\", \"date\": \"строка\", \"purpose\": \"строка\", \"is_readable\": boolean}\n\n" +
+            "\"recipient_name\": \"строка\", \"date\": \"строка\", \"is_readable\": boolean}\n\n" +
             "Поля:\n" +
-            "check_is_real — это реальный чек/скриншот перевода (не просто картинка)?\n" +
-            "amount — сумма и валюта (например: 990 тг)\n" +
-            "recipient_card — номер карты получателя\n" +
-            "recipient_name — имя получателя\n" +
-            "date — дата транзакции\n" +
-            "purpose — назначение платежа\n" +
-            "is_readable — фото чёткое и читаемое?";
+            "check_is_real — это реальный чек/скриншот банковского перевода (не фейк и не просто картинка)?\n" +
+            "amount — сумма и валюта (например: 990 ₸). Если не видно — пустая строка.\n" +
+            "recipient_card — номер карты получателя (все цифры которые видно, включая маскированные вроде ****5268). Если не видно — пустая строка.\n" +
+            "recipient_name — имя получателя ЗАГЛАВНЫМИ латинскими буквами, точно как на чеке (например: KENZHALIN AMIR). Если не видно — пустая строка.\n" +
+            "date — дата транзакции. Если не видно — пустая строка.\n" +
+            "is_readable — фото чёткое, не обрезанное и все ключевые поля читаемы?";
 
         // Формируем JSON запрос к Claude
         JsonObject imageSource = new JsonObject();
@@ -139,37 +139,47 @@ public class ReceiptAnalyzer {
         StringBuilder issues = new StringBuilder();
 
         boolean readable = getBool(data, "is_readable");
-        boolean isReal = getBool(data, "check_is_real");
-        String amount = getStr(data, "amount");
-        String card = getStr(data, "recipient_card");
-        String purpose = getStr(data, "purpose").toLowerCase();
-        String name = getStr(data, "recipient_name");
-        String date = getStr(data, "date");
+        boolean isReal   = getBool(data, "check_is_real");
+        String amount    = getStr(data, "amount");
+        String card      = getStr(data, "recipient_card").replaceAll("[^0-9*]", "");
+        String name      = getStr(data, "recipient_name").toUpperCase().trim();
+        String date      = getStr(data, "date");
 
-        if (!readable) { issues.append("• Фото нечёткое или низкого качества\n"); valid = false; }
-        if (!isReal)   { issues.append("• Это не выглядит как реальный чек\n"); valid = false; }
+        String lastDigits = EXPECTED_CARD.substring(EXPECTED_CARD.length() - 4); // "5268"
+
+        if (!readable) {
+            issues.append("• Фото нечёткое или обрезанное — не все поля читаемы\n");
+            valid = false;
+        }
+        if (!isReal) {
+            issues.append("• Это не похоже на реальный банковский чек\n");
+            valid = false;
+        }
         if (!amount.contains(EXPECTED_AMOUNT)) {
-            issues.append("• Сумма должна быть 990 ₸, найдено: ").append(amount).append("\n");
+            issues.append("• Сумма должна быть 990 ₸, найдено: ").append(amount.isEmpty() ? "не определено" : amount).append("\n");
             valid = false;
         }
-        if (!card.contains(EXPECTED_CARD.substring(12))) { // последние 4 цифры: 6268
-            issues.append("• Номер карты не совпадает (ожидается ...6268)\n");
+        if (card.isEmpty() || !card.contains(lastDigits)) {
+            issues.append("• Номер карты не совпадает (ожидаются последние цифры ...").append(lastDigits).append(")\n");
             valid = false;
         }
-        if (!purpose.contains("премиум") && !purpose.contains("подписка") && !purpose.contains("premium")) {
-            issues.append("• Назначение должно содержать 'Премиум подписка'\n");
+        if (name.isEmpty() || (!name.contains("KENZHALIN") && !name.contains("AMIR"))) {
+            issues.append("• Имя получателя не совпадает (ожидается: ").append(EXPECTED_NAME).append(")\n");
             valid = false;
         }
 
         String details = String.format(
-            "📊 *Анализ чека:*\n• Сумма: %s\n• Карта: %s\n• Получатель: %s\n• Дата: %s\n• Назначение: %s",
-            amount, card, name, date, purpose
+            "📋 *Анализ квитанции:*\n• Сумма: %s\n• Карта получателя: %s\n• Имя получателя: %s\n• Дата: %s",
+            amount.isEmpty() ? "—" : amount,
+            card.isEmpty()   ? "—" : card,
+            name.isEmpty()   ? "—" : name,
+            date.isEmpty()   ? "—" : date
         );
 
         if (!valid) details += "\n\n❌ *Проблемы:*\n" + issues;
 
         return new AnalysisResult(valid,
-            valid ? "✅ Чек прошёл проверку!" : "❌ Чек не прошёл проверку",
+            valid ? "✅ Оплата подтверждена!" : "❌ Квитанция не прошла проверку",
             details
         );
     }

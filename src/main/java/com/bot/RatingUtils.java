@@ -26,24 +26,21 @@ public class RatingUtils {
     }
 
     public static double evaluateFace(String photoId, String gender) {
-    if (photoId == null || photoId.isEmpty()) return 5.0;
-    
-    try {
-        String photoUrl = getPhotoUrl(photoId);
-        if (photoUrl == null) return 5.0;
-        
-        // Получаем полный результат
-        FacePlusPlusAnalyzer.FaceAnalysisResult result = FacePlusPlusAnalyzer.analyzeFaceFull(photoUrl);
-        
-        // Сохраняем анализ в отдельное место (например, в статическую переменную или кэш)
-        lastFaceAnalysis = result.analysisText;
-        
-        return result.rating;
-    } catch (Exception e) {
-        e.printStackTrace();
-        return 5.0;
+        if (photoId == null || photoId.isEmpty()) return -1.0;
+
+        try {
+            String photoUrl = getPhotoUrl(photoId);
+            if (photoUrl == null) return -1.0;
+
+            FacePlusPlusAnalyzer.FaceAnalysisResult result = FacePlusPlusAnalyzer.analyzeFaceFull(photoUrl);
+            lastFaceAnalysis = result.analysisText;
+
+            return result.rating;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return -1.0;
+        }
     }
-}
 
 // Добавь переменную для хранения последнего анализа
 private static String lastFaceAnalysis = "";

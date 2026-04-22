@@ -23,6 +23,8 @@ public class RatingBot extends TelegramLongPollingBot {
 
     private final String BOT_TOKEN = "8762441185:AAHBI8LCr47AD6XJRx-bakOSLHfzGgTVpuk";
     private final String BOT_USERNAME = "Kara_Tabletka_Bot";
+    // Используй /myid чтобы узнать свой chat_id, затем вставь сюда
+    private static final long ADMIN_CHAT_ID = 0L;
     private final Map<Long, UserSession> users = new HashMap<>();
 
     public RatingBot() {
@@ -85,6 +87,12 @@ public class RatingBot extends TelegramLongPollingBot {
                 } else if (text.equals("💎 Премиум")) {
                     premium(chatId, session);
                     return;
+                } else if (text.equals("/myid")) {
+                    sendText(chatId, "🆔 Ваш chat ID: `" + chatId + "`");
+                    return;
+                } else if (text.startsWith("/givepremium")) {
+                    handleGivePremium(chatId, text, session);
+                    return;
                 } else if (text.equals("❓ Помощь")) {
                     help(chatId, session);
                     return;
@@ -105,6 +113,11 @@ public class RatingBot extends TelegramLongPollingBot {
                     return;
                 }
 
+                if (session.getState() == UserState.WAITING_FOR_RECEIPT) {
+                    sendText(chatId, "📎 Отправьте скриншот квитанции фото или файлом.\nЧтобы отменить — /start");
+                    return;
+                }
+
                 if (session.getState() == UserState.SELECTING_GENDER) {
                     handleGenderSelection(chatId, text, session);
                     return;
@@ -120,10 +133,25 @@ public class RatingBot extends TelegramLongPollingBot {
                 return;
             }
 
-            if (msg.hasPhoto() && session.getState() == UserState.WAITING_FOR_PHOTO) {
-                handlePhoto(chatId, msg, session);
-            } else {
-                sendText(chatId, "❌ Отправьте фото или используйте кнопки");
+            if (msg.hasDocument()) {
+                if (session.getState() == UserState.WAITING_FOR_RECEIPT) {
+                    handleReceiptFile(chatId, msg.getDocument().getFileId(), session);
+                } else {
+                    sendText(chatId, "❌ Используйте кнопки меню");
+                }
+                return;
+            }
+
+            if (msg.hasPhoto()) {
+                if (session.getState() == UserState.WAITING_FOR_PHOTO) {
+                    handlePhoto(chatId, msg, session);
+                } else if (session.getState() == UserState.WAITING_FOR_RECEIPT) {
+                    String photoId = msg.getPhoto().get(msg.getPhoto().size() - 1).getFileId();
+                    handleReceiptFile(chatId, photoId, session);
+                } else {
+                    sendText(chatId, "❌ Отправьте фото или используйте кнопки");
+                }
+                return;
             }
         } catch (Exception e) {
             System.err.println("Ошибка: " + e.getMessage());
@@ -140,27 +168,30 @@ public class RatingBot extends TelegramLongPollingBot {
     }
 
     private void premium(Long chatId, UserSession session) {
-        if (!session.isPremium()) {
-            session.activatePremiumDays(30);
-            persistSessions();
-            sendText(
-                chatId,
-                "✅ Премиум активирован на 30 дней!\n\nТеперь вам доступны:\n"
-                    + "• подробный разбор по каждой оценке\n"
-                    + "• рекомендации, как поднять балл\n"
-                    + "• сравнение с прошлым результатом\n"
-                    + "• расширенная история и статистика"
-            );
-        } else {
+        if (session.isPremium()) {
             String until = session.getPremiumUntilLabel();
             String suffix = until == null ? "" : "\nАктивен до: " + until;
-            sendText(
-                chatId,
-                "💎 Премиум уже активен." + suffix
-                    + "\n\nВам доступны подробный разбор, советы по улучшению и полная история."
-            );
+            sendText(chatId, "💎 Премиум уже активен." + suffix
+                + "\n\nВам доступны подробный разбор, советы по улучшению и полная история.");
+            mainMenu(chatId);
+            return;
         }
-        mainMenu(chatId);
+
+        session.setState(UserState.WAITING_FOR_RECEIPT);
+        sendText(chatId,
+            "💎 *Премиум подписка — 990 ₸ / 30 дней*\n\n"
+            + "Вам откроются:\n"
+            + "• подробный разбор каждой оценки\n"
+            + "• рекомендации по улучшению\n"
+            + "• сравнение с прошлым результатом\n"
+            + "• расширенная история и статистика\n\n"
+            + "💳 *Реквизиты для оплаты:*\n"
+            + "Карта: `" + ReceiptAnalyzer.EXPECTED_CARD + "`\n"
+            + "Получатель: `" + ReceiptAnalyzer.EXPECTED_NAME + "`\n"
+            + "Сумма: `990 ₸`\n\n"
+            + "После оплаты отправьте скриншот квитанции — *фото или файлом*.\n"
+            + "Чтобы отменить — /start"
+        );
     }
 
     private void compare(Long chatId, UserSession session) {
@@ -396,6 +427,63 @@ public class RatingBot extends TelegramLongPollingBot {
         }
     }
 
+    private void handleReceiptFile(Long chatId, String fileId, UserSession session) {
+        sendText(chatId, "🔍 Проверяю квитанцию, подождите...");
+        try {
+            String tmpPath = System.getProperty("java.io.tmpdir") + "/receipt_" + chatId + ".jpg";
+            ReceiptAnalyzer.downloadTelegramFile(fileId, this, tmpPath);
+            ReceiptAnalyzer.AnalysisResult result = ReceiptAnalyzer.analyzeReceipt(tmpPath);
+
+            sendText(chatId, result.detailedAnalysis);
+
+            if (result.isValid) {
+                session.activatePremiumDays(30);
+                persistSessions();
+                session.setState(UserState.SELECTING_GENDER);
+                sendText(chatId,
+                    "✅ *Оплата подтверждена!*\n\n"
+                    + "💎 Премиум активирован на 30 дней.\n"
+                    + "Теперь вам доступны подробный разбор, советы по улучшению и полная история.");
+                mainMenu(chatId);
+            } else {
+                sendText(chatId,
+                    result.message + "\n\nПопробуйте отправить более чёткий скриншот квитанции.\n"
+                    + "Чтобы отменить — /start");
+            }
+        } catch (Exception e) {
+            sendText(chatId, "❌ Не удалось обработать файл. Отправьте чёткое фото квитанции (JPEG или PNG).");
+            e.printStackTrace();
+        }
+    }
+
+    private void handleGivePremium(Long chatId, String text, UserSession session) {
+        if (chatId != ADMIN_CHAT_ID) {
+            sendText(chatId, "❌ Нет доступа.");
+            return;
+        }
+        String[] parts = text.trim().split("\\s+");
+        if (parts.length < 2) {
+            session.activatePremiumDays(30);
+            persistSessions();
+            sendText(chatId, "✅ Премиум активирован вам на 30 дней.");
+            mainMenu(chatId);
+            return;
+        }
+        try {
+            Long targetId = Long.parseLong(parts[1]);
+            UserSession target = users.getOrDefault(targetId, new UserSession());
+            users.put(targetId, target);
+            target.activatePremiumDays(30);
+            persistSessions();
+            sendText(chatId, "✅ Премиум выдан пользователю `" + targetId + "` на 30 дней.");
+            try {
+                sendText(targetId, "🎁 Вам выдан Премиум на 30 дней!\n\nТеперь доступны подробный разбор, советы по улучшению и полная история.");
+            } catch (Exception ignored) {}
+        } catch (NumberFormatException e) {
+            sendText(chatId, "❌ Неверный формат. Используйте: /givepremium <chatId>\nУзнать свой ID: /myid");
+        }
+    }
+
     private void handlePhoto(Long chatId, Message msg, UserSession session) {
         try {
             String photoId = msg.getPhoto().get(msg.getPhoto().size() - 1).getFileId();
@@ -408,6 +496,12 @@ public class RatingBot extends TelegramLongPollingBot {
                 rating = RatingUtils.evaluateFace(photoId, gender);
             } else {
                 rating = RatingUtils.evaluateBodyByPhoto(photoId, gender);
+            }
+
+            if (rating < 0) {
+                sendText(chatId, "😶 На фото не обнаружено лицо.\n\nПожалуйста, скиньте фотографию, где чётко видно лицо анфас — без маски, солнечных очков или сильного наклона головы.");
+                mainMenu(chatId);
+                return;
             }
 
             Double previousRating = session.getPreviousRating(ratingType);
